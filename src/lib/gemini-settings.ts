@@ -30,3 +30,7 @@ export function encodeStoredGeminiSettings(settings: StoredGeminiSettings) {
     generationMode: settings.generationMode === 'direct' ? 'direct' : 'batch',
   })}`
 }
+
+export function isValidGeminiApiKey(apiKey: string | null | undefined) {
+  return typeof apiKey === 'string' && apiKey.startsWith('AIza') && apiKey.length >= 30
+}

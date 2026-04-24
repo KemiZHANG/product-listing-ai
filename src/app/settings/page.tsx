@@ -190,7 +190,10 @@ export default function SettingsPage() {
     if (settings.use_builtin_key && !settings.builtin_key_password_verified) {
       return { text: '内置 Key (待验证)', color: 'text-yellow-600' }
     }
-    if (settings.gemini_api_key_encrypted) {
+    if (settings.gemini_api_key_encrypted && settings.gemini_api_key_valid === false) {
+      return { text: 'Key 格式无效，请重新保存', color: 'text-red-600' }
+    }
+    if (settings.gemini_api_key_encrypted && settings.gemini_api_key_valid !== false) {
       return { text: '已设置 (自有 Key)', color: 'text-green-600' }
     }
     return { text: '未设置', color: 'text-red-600' }

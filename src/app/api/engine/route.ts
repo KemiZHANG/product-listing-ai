@@ -11,7 +11,7 @@ import {
   getGeminiBatch,
   uploadBatchInputFile,
 } from '@/lib/gemini-batch'
-import { GenerationMode, parseStoredGeminiSettings } from '@/lib/gemini-settings'
+import { GenerationMode, isValidGeminiApiKey, parseStoredGeminiSettings } from '@/lib/gemini-settings'
 
 export const maxDuration = 300
 
@@ -620,6 +620,20 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const { apiKey } = await getGeminiSettings(supabase, job.user_id)
+    if (!apiKey || !isValidGeminiApiKey(apiKey)) {
+      await supabase
+        .from('jobs')
+        .update({
+          status: 'failed',
+          error_message: 'Gemini API Key 无效。请在 Settings 中保存 Google AI Studio 的有效 API Key，通常以 AIza 开头。',
+        })
+        .eq('id', job.id)
+      return NextResponse.json({
+        error: 'Gemini API Key 无效。请在 Settings 中保存 Google AI Studio 的有效 API Key，通常以 AIza 开头。',
+      }, { status: 400 })
+    }
+
     const result = await runOrPollBatchJob(supabase, job as JobRecord)
     const status = 'status' in result && typeof result.status === 'number' ? result.status : 200
     return NextResponse.json(result, { status })

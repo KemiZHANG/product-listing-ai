@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
-import { encodeStoredGeminiSettings, parseStoredGeminiSettings } from '@/lib/gemini-settings'
+import { encodeStoredGeminiSettings, isValidGeminiApiKey, parseStoredGeminiSettings } from '@/lib/gemini-settings'
 
 function withGenerationMode<T extends { gemini_api_key_encrypted: string | null }>(settings: T) {
   const stored = parseStoredGeminiSettings(settings.gemini_api_key_encrypted)
+  const hasStoredKey = Boolean(stored.apiKey)
+  const hasValidStoredKey = isValidGeminiApiKey(stored.apiKey)
   return {
     ...settings,
-    gemini_api_key_encrypted: stored.apiKey || null,
+    gemini_api_key_encrypted: hasStoredKey ? 'configured' : null,
+    gemini_api_key_valid: hasValidStoredKey,
     generation_mode: stored.generationMode || 'batch',
   }
 }
@@ -73,7 +76,7 @@ export async function PUT(request: NextRequest) {
 
   if (gemini_api_key !== undefined) {
     const trimmedKey = String(gemini_api_key).trim()
-    if (!trimmedKey.startsWith('AIza') || trimmedKey.length < 30) {
+    if (!isValidGeminiApiKey(trimmedKey)) {
       return NextResponse.json({
         error: '请输入有效的 Gemini API Key。Google AI Studio 的 key 通常以 AIza 开头。',
       }, { status: 400 })

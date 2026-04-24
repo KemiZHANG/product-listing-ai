@@ -104,6 +104,7 @@ export interface SystemSettings {
   id: string
   user_id: string
   gemini_api_key_encrypted: string | null
+  gemini_api_key_valid?: boolean
   use_builtin_key: boolean
   builtin_key_password_verified: boolean
   generation_mode?: 'direct' | 'batch'
