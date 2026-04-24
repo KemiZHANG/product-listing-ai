@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/api'
 import type { Category } from '@/lib/types'
 import Navbar from '@/components/Navbar'
 
@@ -32,7 +33,7 @@ export default function DashboardPage() {
   // Fetch categories
   const fetchCategories = useCallback(async () => {
     try {
-      const res = await fetch('/api/categories')
+      const res = await apiFetch('/api/categories')
       if (res.ok) {
         const data = await res.json()
         setCategories(data)
@@ -67,7 +68,7 @@ export default function DashboardPage() {
     setRunning(true)
     setError(null)
     try {
-      const res = await fetch('/api/jobs', {
+      const res = await apiFetch('/api/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ category_ids: Array.from(selected) }),
@@ -90,7 +91,7 @@ export default function DashboardPage() {
     setCreating(true)
     setError(null)
     try {
-      const res = await fetch('/api/categories', {
+      const res = await apiFetch('/api/categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newForm),

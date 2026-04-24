@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/api'
 import type { Job, JobSnapshot, JobItem } from '@/lib/types'
 import Navbar from '@/components/Navbar'
 import ConfirmDialog from '@/components/ConfirmDialog'
@@ -72,7 +73,7 @@ export default function JobsPage() {
   // Fetch jobs list
   const fetchJobs = useCallback(async () => {
     try {
-      const res = await fetch('/api/jobs')
+      const res = await apiFetch('/api/jobs')
       if (res.ok) {
         const data = await res.json()
         setJobs(data)
@@ -116,7 +117,7 @@ export default function JobsPage() {
   const fetchJobDetail = useCallback(async (jobId: string) => {
     setDetailLoading(true)
     try {
-      const res = await fetch(`/api/jobs/${jobId}`)
+      const res = await apiFetch(`/api/jobs/${jobId}`)
       if (res.ok) {
         const data = await res.json()
         setJobDetail(data)
@@ -143,7 +144,7 @@ export default function JobsPage() {
     if (!confirmJobId) return
     setCancelling(confirmJobId)
     try {
-      const res = await fetch(`/api/jobs/${confirmJobId}`, { method: 'DELETE' })
+      const res = await apiFetch(`/api/jobs/${confirmJobId}`, { method: 'DELETE' })
       if (res.ok) {
         await fetchJobs()
         if (expandedJobId === confirmJobId) {

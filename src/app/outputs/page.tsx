@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/api'
 import type { Category, Output } from '@/lib/types'
 import Navbar from '@/components/Navbar'
 
@@ -11,6 +12,7 @@ export default function OutputsPage() {
   const [loading, setLoading] = useState(true)
   const [categories, setCategories] = useState<Category[]>([])
   const [outputs, setOutputs] = useState<Output[]>([])
+  const [outputUrls, setOutputUrls] = useState<Record<string, string>>({})
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
   const [page, setPage] = useState(1)
@@ -42,7 +44,7 @@ export default function OutputsPage() {
   // Fetch categories for filter dropdown
   const fetchCategories = useCallback(async () => {
     try {
-      const res = await fetch('/api/categories')
+      const res = await apiFetch('/api/categories')
       if (res.ok) {
         const data = await res.json()
         setCategories(data)
@@ -70,12 +72,21 @@ export default function OutputsPage() {
       if (promptNumber) params.set('prompt_number', promptNumber)
       if (search) params.set('search', search)
 
-      const res = await fetch(`/api/outputs?${params.toString()}`)
+      const res = await apiFetch(`/api/outputs?${params.toString()}`)
       if (res.ok) {
         const data = await res.json()
         setOutputs(data.data)
         setTotal(data.total)
         setTotalPages(data.totalPages)
+        const signedUrls = await Promise.all(
+          data.data.map(async (output: Output) => {
+            const { data: signed } = await supabase.storage
+              .from('outputs')
+              .createSignedUrl(output.storage_path, 60 * 60)
+            return [output.storage_path, signed?.signedUrl ?? ''] as const
+          })
+        )
+        setOutputUrls(Object.fromEntries(signedUrls))
       }
     } catch {
       // silent
@@ -110,17 +121,20 @@ export default function OutputsPage() {
     }
   }, [categorySlug, date, promptNumber, search])
 
-  const openPreview = (output: Output) => {
-    // Construct a public URL or signed URL from storage_path
-    const { data } = supabase.storage.from('outputs').getPublicUrl(output.storage_path)
-    setPreviewUrl(data.publicUrl)
+  const openPreview = async (output: Output) => {
+    const { data } = await supabase.storage
+      .from('outputs')
+      .createSignedUrl(output.storage_path, 60 * 60)
+    setPreviewUrl(data?.signedUrl ?? outputUrls[output.storage_path] ?? '')
     setPreviewFilename(output.output_filename)
   }
 
   const handleDownload = async (output: Output) => {
-    const { data } = supabase.storage.from('outputs').getPublicUrl(output.storage_path)
+    const { data } = await supabase.storage
+      .from('outputs')
+      .createSignedUrl(output.storage_path, 60 * 60)
     const link = document.createElement('a')
-    link.href = data.publicUrl
+    link.href = data?.signedUrl ?? outputUrls[output.storage_path] ?? ''
     link.download = output.output_filename
     link.target = '_blank'
     document.body.appendChild(link)
@@ -129,8 +143,7 @@ export default function OutputsPage() {
   }
 
   const getImageUrl = (storagePath: string) => {
-    const { data } = supabase.storage.from('outputs').getPublicUrl(storagePath)
-    return data.publicUrl
+    return outputUrls[storagePath] || ''
   }
 
   if (loading) {

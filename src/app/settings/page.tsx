@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/api'
 import type { SystemSettings, Profile } from '@/lib/types'
 import Navbar from '@/components/Navbar'
 
@@ -35,7 +36,7 @@ export default function SettingsPage() {
   const fetchData = useCallback(async () => {
     try {
       const [settingsRes, userRes] = await Promise.all([
-        fetch('/api/settings'),
+        apiFetch('/api/settings'),
         supabase.auth.getUser(),
       ])
 
@@ -74,7 +75,7 @@ export default function SettingsPage() {
     setVerifying(true)
     setKeyMessage(null)
     try {
-      const res = await fetch('/api/settings/verify-builtin', {
+      const res = await apiFetch('/api/settings/verify-builtin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),
@@ -103,7 +104,7 @@ export default function SettingsPage() {
     setSaving(true)
     setKeyMessage(null)
     try {
-      const res = await fetch('/api/settings', {
+      const res = await apiFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -136,7 +137,7 @@ export default function SettingsPage() {
     if (mode === 'own' && settings?.use_builtin_key) {
       // Switch away from builtin
       try {
-        await fetch('/api/settings', {
+        await apiFetch('/api/settings', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ use_builtin_key: false }),

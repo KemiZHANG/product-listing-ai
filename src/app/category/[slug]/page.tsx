@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/api'
 import Navbar from '@/components/Navbar'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import type { Category, CategoryPrompt, CategoryImage } from '@/lib/types'
@@ -21,6 +22,7 @@ export default function CategoryDetailPage() {
   const [category, setCategory] = useState<CategoryDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
+  const [imageUrls, setImageUrls] = useState<Record<string, string>>({})
 
   // Prompt editing state
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null)
@@ -68,7 +70,7 @@ export default function CategoryDetailPage() {
     setLoading(true)
     try {
       // Fetch all categories to find the one matching the slug
-      const res = await fetch('/api/categories')
+      const res = await apiFetch('/api/categories')
       if (!res.ok) throw new Error('Failed to fetch categories')
       const categories: Category[] = await res.json()
       const found = categories.find((c) => c.slug === slug)
@@ -77,10 +79,19 @@ export default function CategoryDetailPage() {
         return
       }
       // Fetch full detail
-      const detailRes = await fetch(`/api/categories/${found.id}`)
+      const detailRes = await apiFetch(`/api/categories/${found.id}`)
       if (!detailRes.ok) throw new Error('Failed to fetch category detail')
       const detail: CategoryDetail = await detailRes.json()
       setCategory(detail)
+      const signedUrls = await Promise.all(
+        detail.images.map(async (image) => {
+          const { data } = await supabase.storage
+            .from('images')
+            .createSignedUrl(image.storage_path, 60 * 60)
+          return [image.storage_path, data?.signedUrl ?? ''] as const
+        })
+      )
+      setImageUrls(Object.fromEntries(signedUrls))
     } catch (err) {
       console.error(err)
     } finally {
@@ -97,7 +108,7 @@ export default function CategoryDetailPage() {
   const handleAddPrompt = async () => {
     if (!category || !newPromptText.trim()) return
     try {
-      const res = await fetch('/api/prompts', {
+      const res = await apiFetch('/api/prompts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ category_id: category.id, prompt_text: newPromptText.trim() }),
@@ -114,7 +125,7 @@ export default function CategoryDetailPage() {
   const handleUpdatePrompt = async (promptId: string) => {
     if (!editingPromptText.trim()) return
     try {
-      const res = await fetch(`/api/prompts/${promptId}`, {
+      const res = await apiFetch(`/api/prompts/${promptId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt_text: editingPromptText.trim() }),
@@ -135,7 +146,7 @@ export default function CategoryDetailPage() {
       message: `确定要删除 P${prompt.prompt_number} 吗？此操作不可撤销。`,
       onConfirm: async () => {
         try {
-          const res = await fetch(`/api/prompts/${prompt.id}`, { method: 'DELETE' })
+          const res = await apiFetch(`/api/prompts/${prompt.id}`, { method: 'DELETE' })
           if (!res.ok) throw new Error('Failed to delete prompt')
           await fetchCategory()
         } catch (err) {
@@ -175,7 +186,7 @@ export default function CategoryDetailPage() {
         const formData = new FormData()
         formData.append('file', file)
         formData.append('category_id', category.id)
-        const res = await fetch('/api/images', { method: 'POST', body: formData })
+        const res = await apiFetch('/api/images', { method: 'POST', body: formData })
         if (!res.ok) {
           const err = await res.json()
           console.error('Upload failed for', file.name, err.error)
@@ -207,7 +218,7 @@ export default function CategoryDetailPage() {
   const handleUpdateImageName = async (imageId: string) => {
     if (!editingImageName.trim()) return
     try {
-      const res = await fetch(`/api/images/${imageId}`, {
+      const res = await apiFetch(`/api/images/${imageId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ display_name: editingImageName.trim() }),
@@ -228,7 +239,7 @@ export default function CategoryDetailPage() {
       message: `确定要删除 "${image.display_name}" 吗？此操作不可撤销。`,
       onConfirm: async () => {
         try {
-          const res = await fetch(`/api/images/${image.id}`, { method: 'DELETE' })
+          const res = await apiFetch(`/api/images/${image.id}`, { method: 'DELETE' })
           if (!res.ok) throw new Error('Failed to delete image')
           await fetchCategory()
         } catch (err) {
@@ -251,8 +262,7 @@ export default function CategoryDetailPage() {
 
   // Get signed URL for image thumbnail
   const getImageUrl = (storagePath: string) => {
-    const { data } = supabase.storage.from('images').getPublicUrl(storagePath)
-    return data.publicUrl
+    return imageUrls[storagePath] || ''
   }
 
   // --- Run job ---
@@ -261,7 +271,7 @@ export default function CategoryDetailPage() {
     if (!category) return
     setRunningJob(true)
     try {
-      const res = await fetch('/api/jobs', {
+      const res = await apiFetch('/api/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ category_ids: [category.id] }),

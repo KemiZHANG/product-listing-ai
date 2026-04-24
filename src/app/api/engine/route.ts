@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSupabase } from '@/lib/supabase'
+import { getAuthenticatedUser, getServerSupabase } from '@/lib/supabase'
 
 export const maxDuration = 300
 
@@ -73,6 +73,10 @@ async function generateImage(apiKey: string, promptText: string, imageBase64: st
 
 export async function POST(request: NextRequest) {
   const supabase = getServerSupabase()
+  const { user, error: authError } = await getAuthenticatedUser(request)
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   const body = await request.json()
   const { job_id } = body
@@ -89,6 +93,9 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (jobError || !job) {
+    return NextResponse.json({ error: 'Job not found' }, { status: 404 })
+  }
+  if (job.user_id !== user.id) {
     return NextResponse.json({ error: 'Job not found' }, { status: 404 })
   }
 
@@ -184,12 +191,12 @@ export async function POST(request: NextRequest) {
 
       // Generate output filename
       const outputFilename = `${item.image_display_name}_prompt${item.prompt_number}_${Date.now()}.png`
-      const outputStoragePath = `outputs/${job.user_id}/${outputFilename}`
+      const outputStoragePath = `${job.user_id}/${outputFilename}`
 
       // Upload generated image to storage
       const outputBuffer = Buffer.from(generatedBase64, 'base64')
       const { error: uploadError } = await supabase.storage
-        .from('images')
+        .from('outputs')
         .upload(outputStoragePath, outputBuffer, {
           contentType: 'image/png',
           upsert: false,

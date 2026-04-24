@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSupabase } from '@/lib/supabase'
+import { getAuthenticatedUser, getServerSupabase } from '@/lib/supabase'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = getServerSupabase()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  const { user, error: authError } = await getAuthenticatedUser(request)
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -23,7 +23,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const supabase = getServerSupabase()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  const { user, error: authError } = await getAuthenticatedUser(request)
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -149,7 +149,10 @@ export async function POST(request: NextRequest) {
   const engineUrl = new URL('/api/engine', request.url)
   fetch(engineUrl.toString(), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: request.headers.get('authorization') || '',
+    },
     body: JSON.stringify({ job_id: job.id }),
   }).catch(() => {
     // Engine call failed silently - job items remain pending for retry
