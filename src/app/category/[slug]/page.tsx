@@ -67,7 +67,23 @@ export default function CategoryDetailPage() {
   // Fetch category data
   const fetchCategory = useCallback(async () => {
     if (!userId) return
-    setLoading(true)
+    const cacheKey = `nano-banana:category:${slug}`
+    const cached = window.sessionStorage.getItem(cacheKey)
+    let hasCachedCategory = false
+    if (cached) {
+      try {
+        const cachedDetail: CategoryDetail = JSON.parse(cached)
+        setCategory(cachedDetail)
+        setLoading(false)
+        hasCachedCategory = true
+      } catch {
+        window.sessionStorage.removeItem(cacheKey)
+      }
+    }
+
+    if (!hasCachedCategory) {
+      setLoading(true)
+    }
     try {
       const detailRes = await apiFetch(`/api/categories/slug/${slug}`)
       if (detailRes.status === 404) {
@@ -77,6 +93,7 @@ export default function CategoryDetailPage() {
       if (!detailRes.ok) throw new Error('Failed to fetch category detail')
       const detail: CategoryDetail = await detailRes.json()
       setCategory(detail)
+      window.sessionStorage.setItem(cacheKey, JSON.stringify(detail))
       const signedUrls = await Promise.all(
         detail.images.map(async (image) => {
           const { data } = await supabase.storage
@@ -110,6 +127,7 @@ export default function CategoryDetailPage() {
       if (!res.ok) throw new Error('Failed to add prompt')
       setNewPromptText('')
       setAddingPrompt(false)
+      window.sessionStorage.removeItem(`nano-banana:category:${slug}`)
       await fetchCategory()
     } catch (err) {
       console.error(err)
@@ -127,6 +145,7 @@ export default function CategoryDetailPage() {
       if (!res.ok) throw new Error('Failed to update prompt')
       setEditingPromptId(null)
       setEditingPromptText('')
+      window.sessionStorage.removeItem(`nano-banana:category:${slug}`)
       await fetchCategory()
     } catch (err) {
       console.error(err)
@@ -142,6 +161,7 @@ export default function CategoryDetailPage() {
         try {
           const res = await apiFetch(`/api/prompts/${prompt.id}`, { method: 'DELETE' })
           if (!res.ok) throw new Error('Failed to delete prompt')
+          window.sessionStorage.removeItem(`nano-banana:category:${slug}`)
           await fetchCategory()
         } catch (err) {
           console.error(err)
@@ -186,6 +206,7 @@ export default function CategoryDetailPage() {
           console.error('Upload failed for', file.name, err.error)
         }
       }
+      window.sessionStorage.removeItem(`nano-banana:category:${slug}`)
       await fetchCategory()
     } catch (err) {
       console.error(err)
@@ -220,6 +241,7 @@ export default function CategoryDetailPage() {
       if (!res.ok) throw new Error('Failed to update image')
       setEditingImageId(null)
       setEditingImageName('')
+      window.sessionStorage.removeItem(`nano-banana:category:${slug}`)
       await fetchCategory()
     } catch (err) {
       console.error(err)
@@ -235,6 +257,7 @@ export default function CategoryDetailPage() {
         try {
           const res = await apiFetch(`/api/images/${image.id}`, { method: 'DELETE' })
           if (!res.ok) throw new Error('Failed to delete image')
+          window.sessionStorage.removeItem(`nano-banana:category:${slug}`)
           await fetchCategory()
         } catch (err) {
           console.error(err)

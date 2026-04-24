@@ -11,6 +11,7 @@ import Navbar from '@/components/Navbar'
 export default function DashboardPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
+  const [categoriesLoading, setCategoriesLoading] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [running, setRunning] = useState(false)
@@ -32,14 +33,31 @@ export default function DashboardPage() {
 
   // Fetch categories
   const fetchCategories = useCallback(async () => {
+    const cacheKey = 'nano-banana:categories'
+    const cached = window.sessionStorage.getItem(cacheKey)
+    if (cached) {
+      try {
+        setCategories(JSON.parse(cached))
+      } catch {
+        window.sessionStorage.removeItem(cacheKey)
+      }
+    }
+
+    setCategoriesLoading(true)
     try {
       const res = await apiFetch('/api/categories')
       if (res.ok) {
         const data = await res.json()
         setCategories(data)
+        window.sessionStorage.setItem(cacheKey, JSON.stringify(data))
+      } else {
+        const data = await res.json().catch(() => null)
+        setError(data?.error || '类目加载失败，请刷新页面重试')
       }
-    } catch {
-      // silently ignore fetch errors for now
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '类目加载失败，请刷新页面重试')
+    } finally {
+      setCategoriesLoading(false)
     }
   }, [])
 
@@ -102,6 +120,7 @@ export default function DashboardPage() {
       }
       setShowNewModal(false)
       setNewForm({ name_zh: '', slug: '', icon: '📦' })
+      window.sessionStorage.removeItem('nano-banana:categories')
       await fetchCategories()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred')
@@ -149,9 +168,13 @@ export default function DashboardPage() {
         )}
 
         {/* Category grid */}
-        {categories.length === 0 ? (
+        {categoriesLoading && categories.length === 0 ? (
           <div className="rounded-lg bg-white p-12 text-center shadow-sm">
-            <p className="text-gray-500">暂无类目，点击&quot;新建类目&quot;开始创建。</p>
+            <p className="text-gray-500">类目加载中...</p>
+          </div>
+        ) : categories.length === 0 ? (
+          <div className="rounded-lg bg-white p-12 text-center shadow-sm">
+            <p className="text-gray-500">暂无类目，请刷新页面或点击&quot;新建类目&quot;开始创建。</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
