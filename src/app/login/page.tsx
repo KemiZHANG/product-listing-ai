@@ -14,6 +14,23 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
+  const formatAuthError = (message: string) => {
+    const lower = message.toLowerCase()
+    if (lower.includes('invalid login credentials')) {
+      return '邮箱或密码不正确。如果刚注册过，请确认你输入的是注册时的密码。'
+    }
+    if (lower.includes('email not confirmed')) {
+      return '邮箱还没有确认。请切换到注册重新创建账号，系统会自动完成确认。'
+    }
+    if (lower.includes('already') || lower.includes('registered') || lower.includes('exists')) {
+      return '这个邮箱已经注册过，请切换到登录。'
+    }
+    if (lower.includes('invalid api key')) {
+      return '登录服务配置异常，请刷新页面后重试。'
+    }
+    return message
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -27,16 +44,26 @@ export default function LoginPage() {
         })
         if (err) throw err
       } else {
-        const { error: err } = await supabase.auth.signUp({
+        const registerRes = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        })
+        if (!registerRes.ok) {
+          const data = await registerRes.json()
+          throw new Error(data.error || '注册失败')
+        }
+
+        const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password,
         })
-        if (err) throw err
+        if (signInError) throw signInError
       }
       router.push('/')
       router.refresh()
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred')
+      setError(err instanceof Error ? formatAuthError(err.message) : '发生未知错误，请重试')
     } finally {
       setLoading(false)
     }
