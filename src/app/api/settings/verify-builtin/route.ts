@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
-import { readBuiltinGeminiApiKey } from '@/lib/gemini-settings'
+import { cleanEnvSecret, readBuiltinGeminiApiKey } from '@/lib/gemini-settings'
 
 export async function POST(request: NextRequest) {
   const supabase = getRequestSupabase(request)
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Password is required' }, { status: 400 })
   }
 
-  const accessPassword = process.env.BUILTIN_KEY_ACCESS_PASSWORD
+  const accessPassword = cleanEnvSecret(process.env.BUILTIN_KEY_ACCESS_PASSWORD)
   if (!accessPassword) {
     return NextResponse.json({ error: 'Built-in key access is not configured' }, { status: 500 })
   }

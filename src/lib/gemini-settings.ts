@@ -35,8 +35,20 @@ export function isValidGeminiApiKey(apiKey: string | null | undefined) {
   return typeof apiKey === 'string' && apiKey.startsWith('AIza') && apiKey.length >= 30
 }
 
+export function cleanEnvSecret(value: string | null | undefined) {
+  if (!value) return null
+  let cleaned = value.trim().replace(/\\n/g, '').replace(/\r?\n/g, '')
+  if (
+    (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))
+  ) {
+    cleaned = cleaned.slice(1, -1).trim()
+  }
+  return cleaned || null
+}
+
 export function readBuiltinGeminiApiKey() {
-  const configured = process.env.BUILTIN_GEMINI_API_KEY?.trim()
+  const configured = cleanEnvSecret(process.env.BUILTIN_GEMINI_API_KEY)
   if (!configured) return null
 
   if (isValidGeminiApiKey(configured)) {
