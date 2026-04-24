@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser, getServerSupabase } from '@/lib/supabase'
+import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
 
 export const maxDuration = 300
 
-async function getGeminiApiKey(supabase: ReturnType<typeof getServerSupabase>, userId: string): Promise<string | null> {
+async function getGeminiApiKey(supabase: ReturnType<typeof getRequestSupabase>, userId: string): Promise<string | null> {
   const { data: settings } = await supabase
     .from('system_settings')
     .select('*')
@@ -72,7 +72,7 @@ async function generateImage(apiKey: string, promptText: string, imageBase64: st
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getServerSupabase()
+  const supabase = getRequestSupabase(request)
   const { user, error: authError } = await getAuthenticatedUser(request)
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

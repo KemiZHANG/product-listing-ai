@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser, getServerSupabase } from '@/lib/supabase'
+import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = getServerSupabase()
+  const supabase = getRequestSupabase(request)
   const { user, error: authError } = await getAuthenticatedUser(request)
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -49,7 +49,7 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = getServerSupabase()
+  const supabase = getRequestSupabase(request)
   const { user, error: authError } = await getAuthenticatedUser(request)
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -94,7 +94,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = getServerSupabase()
+  const supabase = getRequestSupabase(request)
   const { user, error: authError } = await getAuthenticatedUser(request)
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

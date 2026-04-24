@@ -23,9 +23,28 @@ export function getServerSupabase() {
   )
 }
 
-export async function getAuthenticatedUser(request: NextRequest) {
+function getBearerToken(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
-  const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]
+  return authHeader?.match(/^Bearer\s+(.+)$/i)?.[1] || null
+}
+
+export function getRequestSupabase(request: NextRequest) {
+  const token = getBearerToken(request)
+
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+    global: token
+      ? {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      : undefined,
+  })
+}
+
+export async function getAuthenticatedUser(request: NextRequest) {
+  const token = getBearerToken(request)
 
   if (!token) {
     return { user: null, error: 'Missing auth token' }
