@@ -1,60 +1,91 @@
-# Nano Banana Web
+# Nano Banana Web / Nano Banana 生图系统
 
 An AI image generation web app for e-commerce product visuals, built with Next.js, Supabase, and Google Gemini 2.5 Flash Image.
 
-## Live Demo
+一个面向电商产品图生成场景的 AI Web 应用，基于 Next.js、Supabase 和 Google Gemini 2.5 Flash Image 构建。
+
+## Live Demo / 在线体验
 
 https://nano-banana-web-zeta.vercel.app
 
-## Overview
+## Overview / 项目概览
 
-Nano Banana Web helps users organize product image generation workflows by category. New accounts are initialized with preset beauty and personal-care categories and prompt templates, so users can start by uploading product images, selecting categories, and running batch generation jobs.
+Nano Banana Web helps users organize product image generation workflows by category. New accounts are automatically initialized with preset beauty and personal-care categories and prompt templates, so users can start by uploading product images, selecting categories, and running generation jobs.
 
-The app supports both standard Gemini image generation and Gemini Batch API mode for lower-cost asynchronous generation.
+Nano Banana Web 用于按类目组织电商产品图生成流程。新用户注册后会自动获得预置的美妆个护类目和对应 Prompt 模板，用户只需要上传产品图、选择类目并运行任务，即可批量生成商品视觉图。
 
-## Features
+The app supports both standard Gemini image generation for faster small jobs and Gemini Batch API mode for lower-cost asynchronous batch generation.
 
-- User registration and login with account-level data isolation
-- 23 preset beauty and personal-care categories for every new user
-- Category-level prompt management with automatic prompt numbering
-- Product image upload and management per category
-- Multi-category batch job creation
-- Frozen job snapshots, so historical jobs are not affected by later prompt or image changes
-- Gemini 2.5 Flash Image standard mode for faster small jobs
-- Gemini Batch API mode for lower-cost asynchronous generation
-- Built-in Gemini API key access with password protection, plus user-owned API key support
-- Job status tracking and cancellable active jobs
-- Output gallery with filtering by category, date, prompt number, and image name
+系统同时支持 Gemini 普通即时生成模式，以及成本更低的 Gemini Batch API 异步批量生成模式。
 
-## Tech Stack
+## Features / 功能亮点
 
-| Layer | Technology |
+- User registration and login with account-level data isolation  
+  用户注册/登录，所有数据按账号隔离
+
+- 23 preset beauty and personal-care categories for every new user  
+  每个新用户自动初始化 23 个美妆个护类目
+
+- Category-level prompt management with automatic prompt numbering  
+  支持按类目管理 Prompt，并自动维护 P1、P2、P3 等编号
+
+- Product image upload and management per category  
+  每个类目可独立上传和管理产品图片
+
+- Multi-category batch job creation  
+  支持勾选多个类目后一键创建批量生成任务
+
+- Frozen job snapshots, so historical jobs are not affected by later configuration changes  
+  任务快照会冻结运行时配置，历史任务不受后续 Prompt 或图片变更影响
+
+- Gemini 2.5 Flash Image standard mode for faster small jobs  
+  支持 Gemini 2.5 Flash Image 普通模式，适合少量图片快速生成
+
+- Gemini Batch API mode for lower-cost asynchronous generation  
+  支持 Gemini Batch API 半价异步模式，适合批量生成
+
+- Built-in Gemini API key access with password protection, plus user-owned API key support  
+  支持密码保护的内置 Gemini API Key，也支持用户自备 Key
+
+- Job status tracking and cancellable active jobs  
+  支持任务状态追踪和运行中任务取消
+
+- Output gallery with filtering by category, date, prompt number, and image name  
+  输出图库支持按类目、日期、Prompt 编号和图片名称筛选
+
+## Tech Stack / 技术栈
+
+| Layer / 模块 | Technology / 技术 |
 | --- | --- |
-| Frontend and API | Next.js 14, App Router, React, TypeScript |
-| Database | Supabase PostgreSQL |
-| Authentication | Supabase Auth |
-| File Storage | Supabase Storage |
-| AI Generation | Google Gemini 2.5 Flash Image, Gemini Batch API |
-| Deployment | Vercel |
+| Frontend and API / 前端与接口 | Next.js 14, App Router, React, TypeScript |
+| Database / 数据库 | Supabase PostgreSQL |
+| Authentication / 用户认证 | Supabase Auth |
+| File Storage / 文件存储 | Supabase Storage |
+| AI Generation / AI 生成 | Google Gemini 2.5 Flash Image, Gemini Batch API |
+| Deployment / 部署 | Vercel |
 
-## Architecture
+## Architecture / 架构说明
 
 The application is deployed as a Vercel-hosted Next.js app. Supabase provides authentication, relational data storage, row-level security, and private image/output storage.
 
-Each user owns their own categories, prompts, uploaded product images, jobs, and generated outputs. Preset categories are seeded automatically for each user, then can be customized independently.
+该应用部署在 Vercel 上，使用 Supabase 提供用户认证、关系型数据存储、行级安全策略以及私有图片/输出文件存储。
 
-## Main Pages
+Each user owns their own categories, prompts, uploaded product images, jobs, and generated outputs. Preset categories are seeded automatically for each user and can then be customized independently.
 
-| Page | Path | Purpose |
+每个用户拥有独立的类目、Prompt、上传图片、任务和输出结果。预置类目会在用户注册/首次访问时自动初始化，之后用户可以独立修改，不影响其他账号。
+
+## Main Pages / 主要页面
+
+| Page / 页面 | Path / 路径 | Purpose / 功能 |
 | --- | --- | --- |
-| Login | `/login` | Register and sign in |
-| Dashboard | `/` | View preset/custom categories and start selected jobs |
-| Category Detail | `/category/[slug]` | Manage prompts and product images |
-| Jobs | `/jobs` | Track generation jobs and inspect snapshots/items |
-| Outputs | `/outputs` | Browse and filter generated images |
-| Settings | `/settings` | Configure API key and generation mode |
+| Login / 登录 | `/login` | Register and sign in / 注册与登录 |
+| Dashboard / 首页 | `/` | View categories and start selected jobs / 查看类目并启动选中任务 |
+| Category Detail / 类目详情 | `/category/[slug]` | Manage prompts and product images / 管理 Prompt 和产品图片 |
+| Jobs / 任务中心 | `/jobs` | Track jobs and inspect snapshots/items / 查看任务状态、快照和任务项 |
+| Outputs / 输出图库 | `/outputs` | Browse and filter generated images / 浏览和筛选生成结果 |
+| Settings / 设置 | `/settings` | Configure API key and generation mode / 配置 API Key 与生成模式 |
 
-## Local Development
+## Local Development / 本地开发
 
 ```bash
 npm install
@@ -63,7 +94,11 @@ npm run dev
 
 Open http://localhost:3000.
 
+访问 http://localhost:3000。
+
 Create a `.env.local` file for local development:
+
+本地开发需要创建 `.env.local` 文件：
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=<your-supabase-project-url>
@@ -74,11 +109,13 @@ BUILTIN_KEY_ACCESS_PASSWORD=<optional-built-in-key-password>
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
-## Database Setup
+## Database Setup / 数据库配置
 
 Run the SQL migration in `supabase/schema.sql` inside the Supabase SQL Editor.
 
-The main tables are:
+在 Supabase SQL Editor 中执行 `supabase/schema.sql` 里的数据库迁移脚本。
+
+Main tables / 主要数据表：
 
 - `profiles`
 - `categories`
@@ -90,9 +127,11 @@ The main tables are:
 - `outputs`
 - `system_settings`
 
-## Deployment
+## Deployment / 部署
 
 The production app is deployed on Vercel. Required production environment variables:
+
+生产环境部署在 Vercel，需要配置以下环境变量：
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=<your-supabase-project-url>
@@ -103,6 +142,8 @@ NEXT_PUBLIC_APP_URL=<your-production-url>
 
 Optional environment variables for the password-protected built-in Gemini key:
 
+如需启用密码保护的内置 Gemini Key，可额外配置：
+
 ```bash
 BUILTIN_GEMINI_API_KEY=<gemini-api-key>
 BUILTIN_KEY_ACCESS_PASSWORD=<access-password>
@@ -110,9 +151,18 @@ BUILTIN_KEY_ACCESS_PASSWORD=<access-password>
 
 After changing Vercel environment variables, redeploy the project so server-side functions receive the latest values.
 
-## Notes
+修改 Vercel 环境变量后，需要重新部署项目，服务端函数才会读取到最新配置。
 
-- New users automatically receive the preset categories and prompts.
-- Uploaded product images are private and scoped to the current user.
-- Batch jobs are asynchronous; completion time depends on Gemini Batch API processing.
-- Standard mode is useful for small, time-sensitive runs, while Batch mode is designed for lower-cost bulk generation.
+## Notes / 说明
+
+- New users automatically receive the preset categories and prompts.  
+  新用户会自动获得预置类目和 Prompt。
+
+- Uploaded product images are private and scoped to the current user.  
+  用户上传的产品图是私有的，并且只属于当前账号。
+
+- Batch jobs are asynchronous; completion time depends on Gemini Batch API processing.  
+  Batch 任务为异步执行，完成时间取决于 Gemini Batch API 的处理速度。
+
+- Standard mode is useful for small, time-sensitive runs, while Batch mode is designed for lower-cost bulk generation.  
+  普通模式适合少量、需要快速看到结果的任务；Batch 模式适合成本更低的批量生成。
