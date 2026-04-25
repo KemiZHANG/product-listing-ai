@@ -5,7 +5,9 @@ const fallbackSupabaseUrl = 'https://ytphdxldfifgafvypyuz.supabase.co'
 const fallbackSupabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0cGhkeGxkZmlmZ2FmdnlweXV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMzI1NzUsImV4cCI6MjA5MjYwODU3NX0.zDVi3v_D4IakcLFuyXVS8u1LTNerTIKcrIHv9dYDFfc'
 
 function isCompleteJwt(value: string | undefined) {
-  return Boolean(value && value.split('.').length === 3)
+  if (!value) return false
+  const parts = value.split('.')
+  return parts.length === 3 && value.length > 120 && parts.every((part) => part.length > 10)
 }
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || fallbackSupabaseUrl
