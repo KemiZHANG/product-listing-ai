@@ -41,3 +41,28 @@ export async function isBuiltinKeyEmailAuthorized(email: string | null | undefin
   const authorization = await getBuiltinKeyAuthorization(email)
   return Boolean(authorization?.active)
 }
+
+export async function getBuiltinKeyAccess(userId: string, email: string | null | undefined) {
+  const supabase = getServerSupabase()
+  const authorization = await getBuiltinKeyAuthorization(email)
+
+  const { data: settings, error } = await supabase
+    .from('system_settings')
+    .select('use_builtin_key, builtin_key_password_verified')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  const emailAuthorized = Boolean(authorization?.active)
+  const passwordVerified = Boolean(settings?.use_builtin_key && settings?.builtin_key_password_verified)
+
+  return {
+    allowed: emailAuthorized || passwordVerified,
+    emailAuthorized,
+    passwordVerified,
+    authorization,
+  }
+}

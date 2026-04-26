@@ -29,6 +29,16 @@ export default function CategoryDetailPage() {
   const [editingPromptText, setEditingPromptText] = useState('')
   const [addingPrompt, setAddingPrompt] = useState(false)
   const [newPromptText, setNewPromptText] = useState('')
+  const [promptGeneratorOpen, setPromptGeneratorOpen] = useState(false)
+  const [promptGenerating, setPromptGenerating] = useState(false)
+  const [promptGeneratorError, setPromptGeneratorError] = useState<string | null>(null)
+  const [promptBrief, setPromptBrief] = useState({
+    productType: '',
+    imageStyle: '',
+    peopleMode: '不带人物',
+    displayMethod: '',
+    extraInfo: '',
+  })
 
   // Expanded prompts (for long text)
   const [expandedPrompts, setExpandedPrompts] = useState<Set<string>>(new Set())
@@ -131,6 +141,42 @@ export default function CategoryDetailPage() {
       await fetchCategory()
     } catch (err) {
       console.error(err)
+    }
+  }
+
+  const handleGeneratePrompt = async () => {
+    if (!category) return
+    setPromptGenerating(true)
+    setPromptGeneratorError(null)
+    try {
+      const res = await apiFetch('/api/prompts/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category_id: category.id,
+          product_type: promptBrief.productType,
+          image_style: promptBrief.imageStyle,
+          people_mode: promptBrief.peopleMode,
+          display_method: promptBrief.displayMethod,
+          extra_info: promptBrief.extraInfo,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        if (data.code === 'BUILTIN_KEY_ACCESS_REQUIRED') {
+          setPromptGeneratorError('此功能需要授权邮箱，或先到 Settings 输入内置 API 访问密码。')
+        } else {
+          setPromptGeneratorError(data.error || 'AI 生成 Prompt 失败。')
+        }
+        return
+      }
+      setAddingPrompt(true)
+      setNewPromptText(data.prompt_text || '')
+    } catch (err) {
+      console.error(err)
+      setPromptGeneratorError('网络错误，请稍后重试。')
+    } finally {
+      setPromptGenerating(false)
     }
   }
 
@@ -434,6 +480,71 @@ export default function CategoryDetailPage() {
               )}
 
               {/* Add prompt form */}
+              <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-medium text-blue-700">AI Prompt 生成器</span>
+                  <button
+                    onClick={() => setPromptGeneratorOpen((open) => !open)}
+                    className="rounded px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-100 transition-colors"
+                  >
+                    {promptGeneratorOpen ? '收起' : '展开'}
+                  </button>
+                </div>
+                {promptGeneratorOpen && (
+                  <div className="space-y-2">
+                    <input
+                      value={promptBrief.productType}
+                      onChange={(e) => setPromptBrief((prev) => ({ ...prev, productType: e.target.value }))}
+                      placeholder="产品类型，例如：爽肤水、洗面奶、精华液"
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-xs text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <input
+                      value={promptBrief.imageStyle}
+                      onChange={(e) => setPromptBrief((prev) => ({ ...prev, imageStyle: e.target.value }))}
+                      placeholder="图片风格，例如：高端清透电商主图、极简广告、生活场景"
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-xs text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <select
+                      value={promptBrief.peopleMode}
+                      onChange={(e) => setPromptBrief((prev) => ({ ...prev, peopleMode: e.target.value }))}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-xs text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="不带人物">不带人物</option>
+                      <option value="带人物辅助，但产品必须更重要">带人物辅助</option>
+                      <option value="根据场景自然决定是否带人物">自然决定</option>
+                    </select>
+                    <input
+                      value={promptBrief.displayMethod}
+                      onChange={(e) => setPromptBrief((prev) => ({ ...prev, displayMethod: e.target.value }))}
+                      placeholder="展示方式，例如：玻璃托盘、水光、浅蓝背景、镜前护理空间"
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-xs text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <textarea
+                      value={promptBrief.extraInfo}
+                      onChange={(e) => setPromptBrief((prev) => ({ ...prev, extraInfo: e.target.value }))}
+                      placeholder="额外要求，例如：背景不要太空、不要虚构功效、文字只能少量英文"
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-xs text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y min-h-[60px]"
+                      rows={2}
+                    />
+                    {promptGeneratorError && (
+                      <div className="rounded-md bg-red-50 p-2 text-xs text-red-700">
+                        {promptGeneratorError}
+                      </div>
+                    )}
+                    <button
+                      onClick={handleGeneratePrompt}
+                      disabled={promptGenerating}
+                      className="w-full rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+                    >
+                      {promptGenerating ? '生成中...' : '生成并填入新 Prompt'}
+                    </button>
+                    <p className="text-[11px] leading-4 text-gray-400">
+                      需要授权邮箱，或先在 Settings 输入内置 API 访问密码。
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {addingPrompt ? (
                 <div className="rounded-lg border border-dashed border-blue-300 bg-blue-50/30 p-3">
                   <div className="mb-2 flex items-center justify-between">
