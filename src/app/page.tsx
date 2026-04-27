@@ -101,14 +101,18 @@ export default function DashboardPage() {
   const stats = useMemo(() => {
     const prompts = categories.reduce((sum, category) => sum + (category.prompt_count ?? 0), 0)
     const images = categories.reduce((sum, category) => sum + (category.image_count ?? 0), 0)
-    return { prompts, images, jobs: prompts * images }
+    const jobs = categories.reduce(
+      (sum, category) => sum + (category.prompt_count ?? 0) * (category.image_count ?? 0),
+      0
+    )
+    return { prompts, images, jobs }
   }, [categories])
 
   const statCards = [
     { label: '类目', value: categories.length },
     { label: 'Prompts', value: stats.prompts },
     { label: '产品图片', value: stats.images },
-    { label: '潜在任务数', value: stats.jobs },
+    { label: '预计出图数', value: stats.jobs },
   ]
 
   const toggleSelect = (id: string) => {
