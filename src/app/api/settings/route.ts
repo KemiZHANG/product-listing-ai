@@ -2,19 +2,23 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
 import { encodeStoredGeminiSettings, isValidGeminiApiKey, parseStoredGeminiSettings } from '@/lib/gemini-settings'
 import { getBuiltinKeyAuthorization } from '@/lib/builtin-key-access'
+import { isAdminEmail } from '@/lib/admin'
 
 async function withGenerationMode<T extends { gemini_api_key_encrypted: string | null }>(settings: T, email?: string | null) {
   const stored = parseStoredGeminiSettings(settings.gemini_api_key_encrypted)
   const hasStoredKey = Boolean(stored.apiKey)
   const hasValidStoredKey = isValidGeminiApiKey(stored.apiKey)
   const authorization = await getBuiltinKeyAuthorization(email)
+  const admin = isAdminEmail(email)
+  const generationMode = admin && stored.generationMode === 'direct' ? 'direct' : 'batch'
   return {
     ...settings,
     gemini_api_key_encrypted: hasStoredKey ? 'configured' : null,
     gemini_api_key_valid: hasValidStoredKey,
-    generation_mode: stored.generationMode || 'batch',
+    generation_mode: generationMode,
     builtin_key_email_authorized: Boolean(authorization?.active),
     builtin_key_authorization_note: authorization?.note || null,
+    is_admin: admin,
   }
 }
 
@@ -77,6 +81,13 @@ export async function PUT(request: NextRequest) {
     .maybeSingle()
 
   const currentStored = parseStoredGeminiSettings(existingSettings?.gemini_api_key_encrypted)
+  const admin = isAdminEmail(user.email)
+
+  if (generation_mode === 'direct' && !admin) {
+    return NextResponse.json({
+      error: '普通即时模式仅管理员可使用。请使用 Batch 半价模式。',
+    }, { status: 403 })
+  }
 
   if (gemini_api_key !== undefined) {
     const trimmedKey = String(gemini_api_key).trim()
@@ -90,7 +101,7 @@ export async function PUT(request: NextRequest) {
   if (gemini_api_key !== undefined || generation_mode !== undefined) {
     updateData.gemini_api_key_encrypted = encodeStoredGeminiSettings({
       apiKey: gemini_api_key !== undefined ? String(gemini_api_key).trim() : currentStored.apiKey,
-      generationMode: generation_mode === 'direct' ? 'direct' : currentStored.generationMode || 'batch',
+      generationMode: generation_mode === 'direct' && admin ? 'direct' : 'batch',
     })
   }
   if (use_builtin_key !== undefined) {

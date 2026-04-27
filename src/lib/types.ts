@@ -107,6 +107,7 @@ export interface SystemSettings {
   gemini_api_key_valid?: boolean
   builtin_key_email_authorized?: boolean
   builtin_key_authorization_note?: string | null
+  is_admin?: boolean
   use_builtin_key: boolean
   builtin_key_password_verified: boolean
   generation_mode?: 'direct' | 'batch'

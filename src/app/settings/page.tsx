@@ -30,7 +30,7 @@ export default function SettingsPage() {
       const data = await settingsRes.json()
       setSettings(data)
       setKeyMode(data.use_builtin_key || data.builtin_key_email_authorized ? 'builtin' : 'own')
-      setGenerationMode(data.generation_mode === 'direct' ? 'direct' : 'batch')
+      setGenerationMode(data.is_admin && data.generation_mode === 'direct' ? 'direct' : 'batch')
     }
 
     if (userRes.data.user) {
@@ -84,6 +84,12 @@ export default function SettingsPage() {
   }
 
   const handleGenerationModeChange = async (mode: 'batch' | 'direct') => {
+    if (mode === 'direct' && !settings?.is_admin) {
+      setGenerationMode('batch')
+      setKeyMessage({ type: 'error', text: '普通即时模式仅管理员可使用。普通用户请使用 Batch 半价模式。' })
+      return
+    }
+
     setGenerationMode(mode)
     setKeyMessage(null)
     const res = await apiFetch('/api/settings', {
@@ -201,6 +207,9 @@ export default function SettingsPage() {
 
   const keyStatus = getKeyStatus()
   const isEmailAuthorized = Boolean(settings?.builtin_key_email_authorized)
+  const isAdmin = Boolean(settings?.is_admin)
+  const authorizedNonAdmin = isEmailAuthorized && !isAdmin
+  const showDirectMode = isAdmin || !isEmailAuthorized
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -309,7 +318,17 @@ export default function SettingsPage() {
 
           <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
             <h3 className="mb-4 text-base font-semibold text-gray-900">生成模式</h3>
-            <div className="grid gap-3 sm:grid-cols-2">
+            {authorizedNonAdmin && (
+              <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                你的邮箱已获得公司授权，可使用内置 API。为控制成本，授权邮箱默认只开放 Batch 半价模式。
+              </div>
+            )}
+            {!isEmailAuthorized && !isAdmin && (
+              <div className="mb-4 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
+                未授权邮箱需要先保存自己的 API Key，或输入内置 Key 访问密码后才能运行任务。普通即时模式仅管理员可用。
+              </div>
+            )}
+            <div className={`grid gap-3 ${showDirectMode ? 'sm:grid-cols-2' : 'sm:grid-cols-1'}`}>
               <label className={`cursor-pointer rounded-md border p-4 transition-colors ${
                 generationMode === 'batch' ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'
               }`}>
@@ -328,7 +347,12 @@ export default function SettingsPage() {
                 </p>
               </label>
 
-              <label className={`cursor-pointer rounded-md border p-4 transition-colors ${
+              {showDirectMode && (
+              <label className={`rounded-md border p-4 transition-colors ${
+                isAdmin
+                  ? 'cursor-pointer'
+                  : 'cursor-not-allowed opacity-60'
+              } ${
                 generationMode === 'direct' ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'
               }`}>
                 <div className="flex items-center gap-2">
@@ -336,6 +360,7 @@ export default function SettingsPage() {
                     type="radio"
                     name="generationMode"
                     checked={generationMode === 'direct'}
+                    disabled={!isAdmin}
                     onChange={() => handleGenerationModeChange('direct')}
                     className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
@@ -344,7 +369,13 @@ export default function SettingsPage() {
                 <p className="mt-2 text-xs leading-5 text-gray-500">
                   使用 Gemini 2.5 Flash Image 普通 API，适合少量图片或需要更快看到结果的任务。
                 </p>
+                {!isAdmin && (
+                  <p className="mt-2 text-xs font-medium text-amber-700">
+                    仅管理员可启用。
+                  </p>
+                )}
               </label>
+              )}
             </div>
             <p className="mt-3 text-xs text-gray-400">当前模型：Nano Banana / Gemini 2.5 Flash Image</p>
           </div>

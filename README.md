@@ -56,6 +56,9 @@ The app supports both standard Gemini image generation for faster small jobs and
 - Admin page for managing authorized emails for built-in key and AI prompt generation access  
   提供管理员页面，用于添加、取消、恢复内置 Key 和 AI Prompt 生成功能的授权邮箱
 
+- Admin-only standard generation mode; authorized staff accounts are limited to Batch mode  
+  普通即时生成模式仅管理员可用；被授权员工账号只开放 Batch 半价模式
+
 - Job status tracking and cancellable active jobs  
   支持任务状态追踪和运行中任务取消
 
@@ -185,4 +188,4 @@ After changing Vercel environment variables, redeploy the project so server-side
   Batch 任务为异步执行，完成时间取决于 Gemini Batch API 的处理速度。
 
 - Standard mode is useful for small, time-sensitive runs, while Batch mode is designed for lower-cost bulk generation.  
-  普通模式适合少量、需要快速看到结果的任务；Batch 模式适合成本更低的批量生成。
+  普通模式适合少量、需要快速看到结果的任务，仅管理员可启用；Batch 模式适合成本更低的批量生成，也是授权员工账号的默认可用模式。

@@ -13,6 +13,7 @@ import {
 } from '@/lib/gemini-batch'
 import { GenerationMode, isValidGeminiApiKey, parseStoredGeminiSettings, readBuiltinGeminiApiKey } from '@/lib/gemini-settings'
 import { isBuiltinKeyEmailAuthorized } from '@/lib/builtin-key-access'
+import { isAdminEmail } from '@/lib/admin'
 
 export const maxDuration = 300
 
@@ -57,7 +58,9 @@ async function getGeminiSettings(
     }
   }
   const stored = parseStoredGeminiSettings(settings.gemini_api_key_encrypted)
-  const generationMode = stored.generationMode || 'batch'
+  const generationMode: GenerationMode = isAdminEmail(userEmail) && stored.generationMode === 'direct'
+    ? 'direct'
+    : 'batch'
 
   if (
     (settings.use_builtin_key && (settings.builtin_key_password_verified || emailAuthorized)) ||
