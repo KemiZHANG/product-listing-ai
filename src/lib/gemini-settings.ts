@@ -1,10 +1,12 @@
 export type GenerationMode = 'direct' | 'batch'
+export type ImageProvider = 'gemini' | 'openai'
 
 const SETTINGS_PREFIX = '__GEMINI_SETTINGS__'
 
 type StoredGeminiSettings = {
   apiKey?: string | null
   generationMode?: GenerationMode
+  imageProvider?: ImageProvider
 }
 
 export function parseStoredGeminiSettings(value: string | null | undefined): StoredGeminiSettings {
@@ -18,6 +20,7 @@ export function parseStoredGeminiSettings(value: string | null | undefined): Sto
     return {
       apiKey: parsed.apiKey || null,
       generationMode: parsed.generationMode === 'direct' ? 'direct' : 'batch',
+      imageProvider: parsed.imageProvider === 'openai' ? 'openai' : 'gemini',
     }
   } catch {
     return { apiKey: value, generationMode: 'batch' }
@@ -28,6 +31,7 @@ export function encodeStoredGeminiSettings(settings: StoredGeminiSettings) {
   return `${SETTINGS_PREFIX}${JSON.stringify({
     apiKey: settings.apiKey || null,
     generationMode: settings.generationMode === 'direct' ? 'direct' : 'batch',
+    imageProvider: settings.imageProvider === 'openai' ? 'openai' : 'gemini',
   })}`
 }
 

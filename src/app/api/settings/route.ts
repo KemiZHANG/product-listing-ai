@@ -11,11 +11,13 @@ async function withGenerationMode<T extends { gemini_api_key_encrypted: string |
   const authorization = await getBuiltinKeyAuthorization(email)
   const admin = isAdminEmail(email)
   const generationMode = admin && stored.generationMode === 'direct' ? 'direct' : 'batch'
+  const imageProvider = admin && stored.imageProvider === 'openai' ? 'openai' : 'gemini'
   return {
     ...settings,
     gemini_api_key_encrypted: hasStoredKey ? 'configured' : null,
     gemini_api_key_valid: hasValidStoredKey,
     generation_mode: generationMode,
+    image_provider: imageProvider,
     builtin_key_email_authorized: Boolean(authorization?.active),
     builtin_key_authorization_note: authorization?.note || null,
     is_admin: admin,
@@ -70,7 +72,7 @@ export async function PUT(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { gemini_api_key, use_builtin_key, builtin_key_password_verified, generation_mode } = body
+  const { gemini_api_key, use_builtin_key, builtin_key_password_verified, generation_mode, image_provider } = body
 
   const updateData: Record<string, unknown> = {}
 
@@ -89,6 +91,12 @@ export async function PUT(request: NextRequest) {
     }, { status: 403 })
   }
 
+  if (image_provider === 'openai' && !admin) {
+    return NextResponse.json({
+      error: 'GPT Image 2 仅管理员可使用。',
+    }, { status: 403 })
+  }
+
   if (gemini_api_key !== undefined) {
     const trimmedKey = String(gemini_api_key).trim()
     if (!isValidGeminiApiKey(trimmedKey)) {
@@ -98,10 +106,13 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  if (gemini_api_key !== undefined || generation_mode !== undefined) {
+  if (gemini_api_key !== undefined || generation_mode !== undefined || image_provider !== undefined) {
     updateData.gemini_api_key_encrypted = encodeStoredGeminiSettings({
       apiKey: gemini_api_key !== undefined ? String(gemini_api_key).trim() : currentStored.apiKey,
       generationMode: generation_mode === 'direct' && admin ? 'direct' : 'batch',
+      imageProvider: image_provider !== undefined
+        ? (image_provider === 'openai' && admin ? 'openai' : 'gemini')
+        : (currentStored.imageProvider === 'openai' && admin ? 'openai' : 'gemini'),
     })
   }
   if (use_builtin_key !== undefined) {

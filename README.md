@@ -1,8 +1,8 @@
 # Nano Banana Web / Nano Banana 生图系统
 
-An AI image generation web app for e-commerce product visuals, built with Next.js, Supabase, and Google Gemini 2.5 Flash Image.
+An AI image generation web app for e-commerce product visuals, built with Next.js, Supabase, Google Gemini 2.5 Flash Image, and admin-only OpenAI GPT Image 2.
 
-一个面向电商产品图生成场景的 AI Web 应用，基于 Next.js、Supabase 和 Google Gemini 2.5 Flash Image 构建。
+一个面向电商产品图生成场景的 AI Web 应用，基于 Next.js、Supabase、Google Gemini 2.5 Flash Image 和管理员专用 OpenAI GPT Image 2 构建。
 
 ## Live Demo / 在线体验
 
@@ -14,9 +14,9 @@ Nano Banana Web helps users organize product image generation workflows by categ
 
 Nano Banana Web 用于按类目组织电商产品图生成流程。新用户注册后会自动获得预置的美妆个护类目和对应 Prompt 模板，用户只需要上传产品图、选择类目并运行任务，即可批量生成商品视觉图。
 
-The app supports both standard Gemini image generation for faster small jobs and Gemini Batch API mode for lower-cost asynchronous batch generation. It also includes a built-in AI prompt generator that turns short user briefs into structured e-commerce image prompts.
+The app supports standard and Batch image generation with Gemini, plus admin-only standard and Batch generation with OpenAI GPT Image 2. It also includes a built-in AI prompt generator that turns short user briefs into structured e-commerce image prompts.
 
-系统同时支持 Gemini 普通即时生成模式，以及成本更低的 Gemini Batch API 异步批量生成模式；同时内置 AI Prompt 生成器，可将用户输入的简单关键词扩展为结构化电商生图 Prompt。
+系统支持 Gemini 普通即时生成模式和成本更低的 Gemini Batch API 异步批量生成模式；管理员还可以切换使用 OpenAI GPT Image 2 的普通模式或 Batch 模式。同时内置 AI Prompt 生成器，可将用户输入的简单关键词扩展为结构化电商生图 Prompt。
 
 ## Features / 功能亮点
 
@@ -59,6 +59,9 @@ The app supports both standard Gemini image generation for faster small jobs and
 - Admin-only standard generation mode; authorized staff accounts are limited to Batch mode  
   普通即时生成模式仅管理员可用；被授权员工账号只开放 Batch 半价模式
 
+- Admin-only OpenAI GPT Image 2 provider with standard and Batch modes  
+  管理员可切换 OpenAI GPT Image 2，并使用普通模式或 Batch 模式
+
 - Job status tracking and cancellable active jobs  
   支持任务状态追踪和运行中任务取消
 
@@ -73,7 +76,7 @@ The app supports both standard Gemini image generation for faster small jobs and
 | Database / 数据库 | Supabase PostgreSQL |
 | Authentication / 用户认证 | Supabase Auth |
 | File Storage / 文件存储 | Supabase Storage |
-| AI Generation / AI 生成 | Google Gemini 2.5 Flash Image, Gemini Batch API, Gemini text model for prompt generation |
+| AI Generation / AI 生成 | Google Gemini 2.5 Flash Image, Gemini Batch API, OpenAI GPT Image 2, OpenAI Batch API, Gemini text model for prompt generation |
 | Deployment / 部署 | Vercel |
 
 ## Architecture / 架构说明
@@ -169,6 +172,15 @@ BUILTIN_KEY_ACCESS_PASSWORD=<access-password>
 PROMPT_GENERATOR_MODEL=gemini-3-flash-preview
 ```
 
+Optional environment variables for admin-only OpenAI GPT Image 2:
+
+如需启用管理员专用 OpenAI GPT Image 2，可额外配置：
+
+```env
+OPENAI_API_KEY=<openai-secret-key>
+OPENAI_IMAGE_MODEL=gpt-image-2
+```
+
 After changing Vercel environment variables, redeploy the project so server-side functions receive the latest values.
 
 修改 Vercel 环境变量后，需要重新部署项目，服务端函数才会读取到最新配置。
@@ -184,8 +196,8 @@ After changing Vercel environment variables, redeploy the project so server-side
 - Uploaded product images are private and scoped to the current user.  
   用户上传的产品图是私有的，并且只属于当前账号。
 
-- Batch jobs are asynchronous; completion time depends on Gemini Batch API processing.  
-  Batch 任务为异步执行，完成时间取决于 Gemini Batch API 的处理速度。
+- Batch jobs are asynchronous; completion time depends on Gemini Batch API or OpenAI Batch API processing.  
+  Batch 任务为异步执行，完成时间取决于 Gemini Batch API 或 OpenAI Batch API 的处理速度。
 
 - Standard mode is useful for small, time-sensitive runs, while Batch mode is designed for lower-cost bulk generation.  
   普通模式适合少量、需要快速看到结果的任务，仅管理员可启用；Batch 模式适合成本更低的批量生成，也是授权员工账号的默认可用模式。

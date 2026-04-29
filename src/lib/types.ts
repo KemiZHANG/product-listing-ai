@@ -111,6 +111,7 @@ export interface SystemSettings {
   use_builtin_key: boolean
   builtin_key_password_verified: boolean
   generation_mode?: 'direct' | 'batch'
+  image_provider?: 'gemini' | 'openai'
   created_at: string
   updated_at: string
 }

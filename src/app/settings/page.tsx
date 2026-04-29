@@ -14,6 +14,7 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [keyMode, setKeyMode] = useState<'builtin' | 'own'>('own')
   const [generationMode, setGenerationMode] = useState<'batch' | 'direct'>('batch')
+  const [imageProvider, setImageProvider] = useState<'gemini' | 'openai'>('gemini')
   const [password, setPassword] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [verifying, setVerifying] = useState(false)
@@ -31,6 +32,7 @@ export default function SettingsPage() {
       setSettings(data)
       setKeyMode(data.use_builtin_key || data.builtin_key_email_authorized ? 'builtin' : 'own')
       setGenerationMode(data.is_admin && data.generation_mode === 'direct' ? 'direct' : 'batch')
+      setImageProvider(data.is_admin && data.image_provider === 'openai' ? 'openai' : 'gemini')
     }
 
     if (userRes.data.user) {
@@ -108,6 +110,36 @@ export default function SettingsPage() {
     setKeyMessage({
       type: 'success',
       text: mode === 'batch' ? '已切换为 Batch 半价模式。' : '已切换为普通即时模式。',
+    })
+  }
+
+  const handleImageProviderChange = async (provider: 'gemini' | 'openai') => {
+    if (provider === 'openai' && !settings?.is_admin) {
+      setImageProvider('gemini')
+      setKeyMessage({ type: 'error', text: 'GPT Image 2 仅管理员可使用。' })
+      return
+    }
+
+    setImageProvider(provider)
+    setKeyMessage(null)
+    const res = await apiFetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_provider: provider }),
+    })
+    const data = await res.json()
+
+    if (!res.ok) {
+      setImageProvider('gemini')
+      setKeyMessage({ type: 'error', text: data.error || '保存模型选择失败' })
+      return
+    }
+
+    setSettings(data)
+    setImageProvider(data.image_provider === 'openai' ? 'openai' : 'gemini')
+    setKeyMessage({
+      type: 'success',
+      text: provider === 'openai' ? '已切换为 GPT Image 2。' : '已切换为 Gemini / Nano Banana。',
     })
   }
 
@@ -210,6 +242,8 @@ export default function SettingsPage() {
   const isAdmin = Boolean(settings?.is_admin)
   const authorizedNonAdmin = isEmailAuthorized && !isAdmin
   const showDirectMode = isAdmin || !isEmailAuthorized
+  const currentProvider = isAdmin && imageProvider === 'openai' ? 'openai' : 'gemini'
+  const providerDisplayName = currentProvider === 'openai' ? 'OpenAI GPT Image 2' : 'Nano Banana / Gemini 2.5 Flash Image'
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -316,6 +350,49 @@ export default function SettingsPage() {
             )}
           </div>
 
+          {isAdmin && (
+            <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+              <h3 className="mb-4 text-base font-semibold text-gray-900">图片模型</h3>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className={`cursor-pointer rounded-md border p-4 transition-colors ${
+                  currentProvider === 'gemini' ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="imageProvider"
+                      checked={currentProvider === 'gemini'}
+                      onChange={() => handleImageProviderChange('gemini')}
+                      className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm font-medium text-gray-900">Gemini / Nano Banana</span>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-gray-500">
+                    使用当前的 Gemini 2.5 Flash Image 生成链路，保留现有授权和密码逻辑。
+                  </p>
+                </label>
+
+                <label className={`cursor-pointer rounded-md border p-4 transition-colors ${
+                  currentProvider === 'openai' ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="imageProvider"
+                      checked={currentProvider === 'openai'}
+                      onChange={() => handleImageProviderChange('openai')}
+                      className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm font-medium text-gray-900">OpenAI GPT Image 2</span>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-gray-500">
+                    仅管理员可用，使用 Vercel 中的 OPENAI_API_KEY 和 OPENAI_IMAGE_MODEL。
+                  </p>
+                </label>
+              </div>
+            </div>
+          )}
+
           <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
             <h3 className="mb-4 text-base font-semibold text-gray-900">生成模式</h3>
             {authorizedNonAdmin && (
@@ -343,7 +420,7 @@ export default function SettingsPage() {
                   <span className="text-sm font-medium text-gray-900">Batch 半价模式</span>
                 </div>
                 <p className="mt-2 text-xs leading-5 text-gray-500">
-                  使用 Gemini Batch API，价格约为普通模式 50%，适合批量出图；完成时间通常更久。
+                  使用 {currentProvider === 'openai' ? 'OpenAI Batch API' : 'Gemini Batch API'}，价格约为普通模式 50%，适合批量出图；完成时间通常更久。
                 </p>
               </label>
 
@@ -367,7 +444,7 @@ export default function SettingsPage() {
                   <span className="text-sm font-medium text-gray-900">普通即时模式</span>
                 </div>
                 <p className="mt-2 text-xs leading-5 text-gray-500">
-                  使用 Gemini 2.5 Flash Image 普通 API，适合少量图片或需要更快看到结果的任务。
+                  使用 {currentProvider === 'openai' ? 'GPT Image 2 普通 API' : 'Gemini 2.5 Flash Image 普通 API'}，适合少量图片或需要更快看到结果的任务。
                 </p>
                 {!isAdmin && (
                   <p className="mt-2 text-xs font-medium text-amber-700">
@@ -377,7 +454,7 @@ export default function SettingsPage() {
               </label>
               )}
             </div>
-            <p className="mt-3 text-xs text-gray-400">当前模型：Nano Banana / Gemini 2.5 Flash Image</p>
+            <p className="mt-3 text-xs text-gray-400">当前模型：{providerDisplayName}</p>
           </div>
 
           <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">

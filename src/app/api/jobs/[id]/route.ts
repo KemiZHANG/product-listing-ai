@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
 import { cancelGeminiBatch, decodeBatchMeta } from '@/lib/gemini-batch'
 import { parseStoredGeminiSettings, readBuiltinGeminiApiKey } from '@/lib/gemini-settings'
+import { cancelOpenAIBatch, decodeOpenAIBatchMeta, isValidOpenAIApiKey, readOpenAIImageApiKey } from '@/lib/openai-image'
 
 async function getGeminiApiKey(supabase: ReturnType<typeof getRequestSupabase>, userId: string) {
   const { data: settings } = await supabase
@@ -95,6 +96,14 @@ export async function DELETE(
     const apiKey = await getGeminiApiKey(supabase, user.id)
     if (apiKey) {
       await cancelGeminiBatch(apiKey, batchMeta.batchName).catch(() => null)
+    }
+  }
+
+  const openAiBatchMeta = decodeOpenAIBatchMeta(job.error_message)
+  if (openAiBatchMeta) {
+    const apiKey = readOpenAIImageApiKey()
+    if (apiKey && isValidOpenAIApiKey(apiKey)) {
+      await cancelOpenAIBatch(apiKey, openAiBatchMeta.batchId).catch(() => null)
     }
   }
 
