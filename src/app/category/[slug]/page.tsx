@@ -164,7 +164,7 @@ export default function CategoryDetailPage() {
       const data = await res.json()
       if (!res.ok) {
         if (data.code === 'BUILTIN_KEY_ACCESS_REQUIRED') {
-          setPromptGeneratorError('此功能需要授权邮箱，或先到 Settings 输入内置 API 访问密码。')
+          setPromptGeneratorError('此功能需要授权邮箱、内置 API 访问密码，或先到 Settings 保存自己的 Gemini API Key。')
         } else {
           setPromptGeneratorError(data.error || 'AI 生成 Prompt 失败。')
         }
@@ -539,7 +539,7 @@ export default function CategoryDetailPage() {
                       {promptGenerating ? '生成中...' : '生成并填入新 Prompt'}
                     </button>
                     <p className="text-[11px] leading-4 text-gray-400">
-                      需要授权邮箱，或先在 Settings 输入内置 API 访问密码。
+                        需要授权邮箱、内置 API 访问密码，或先在 Settings 保存自己的 Gemini API Key。
                     </p>
                   </div>
                 )}

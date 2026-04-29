@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getBuiltinKeyAccess } from '@/lib/builtin-key-access'
-import { readBuiltinGeminiApiKey } from '@/lib/gemini-settings'
+import { isValidGeminiApiKey, parseStoredGeminiSettings, readBuiltinGeminiApiKey } from '@/lib/gemini-settings'
+import { isAdminEmail } from '@/lib/admin'
 import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
 import {
   buildPromptGeneratorInstruction,
@@ -29,16 +30,20 @@ export async function POST(request: NextRequest) {
   }
 
   const access = await getBuiltinKeyAccess(user.id, user.email)
-  if (!access.allowed) {
+  const admin = isAdminEmail(user.email)
+  const { data: settings } = await supabase
+    .from('system_settings')
+    .select('gemini_api_key_encrypted')
+    .eq('user_id', user.id)
+    .maybeSingle()
+  const ownGeminiKey = parseStoredGeminiSettings(settings?.gemini_api_key_encrypted).apiKey || null
+  const apiKey = admin || access.allowed ? readBuiltinGeminiApiKey() : ownGeminiKey
+
+  if (!apiKey || !isValidGeminiApiKey(apiKey)) {
     return NextResponse.json({
-      error: 'AI prompt generation requires an authorized email or verified built-in API password.',
+      error: 'AI prompt generation requires an authorized email, verified built-in API password, or your own Gemini API key.',
       code: 'BUILTIN_KEY_ACCESS_REQUIRED',
     }, { status: 403 })
-  }
-
-  const apiKey = readBuiltinGeminiApiKey()
-  if (!apiKey) {
-    return NextResponse.json({ error: 'Built-in Gemini API key is not configured.' }, { status: 500 })
   }
 
   const body = await request.json()

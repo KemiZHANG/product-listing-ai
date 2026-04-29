@@ -64,21 +64,23 @@ async function getGeminiSettings(
     .maybeSingle()
 
   const emailAuthorized = await isBuiltinKeyEmailAuthorized(userEmail)
+  const admin = isAdminEmail(userEmail)
 
   if (!settings) {
     return {
-      apiKey: emailAuthorized ? readBuiltinGeminiApiKey() : null,
+      apiKey: (admin || emailAuthorized) ? readBuiltinGeminiApiKey() : null,
       generationMode: 'batch',
     }
   }
   const stored = parseStoredGeminiSettings(settings.gemini_api_key_encrypted)
-  const generationMode: GenerationMode = isAdminEmail(userEmail) && stored.generationMode === 'direct'
-    ? 'direct'
-    : 'batch'
+  const generationMode: GenerationMode = emailAuthorized && !admin
+    ? 'batch'
+    : (stored.generationMode === 'direct' ? 'direct' : 'batch')
 
   if (
+    admin ||
     (settings.use_builtin_key && (settings.builtin_key_password_verified || emailAuthorized)) ||
-    (emailAuthorized && !stored.apiKey)
+    (emailAuthorized && !admin)
   ) {
     return { apiKey: readBuiltinGeminiApiKey(), generationMode }
   }
@@ -99,13 +101,19 @@ async function getImageGenerationSettings(
 
   const stored = parseStoredGeminiSettings(settings?.gemini_api_key_encrypted)
   const admin = isAdminEmail(userEmail)
-  const provider: ImageProvider = admin && stored.imageProvider === 'openai' ? 'openai' : 'gemini'
-  const generationMode: GenerationMode = admin && stored.generationMode === 'direct' ? 'direct' : 'batch'
+  const emailAuthorized = await isBuiltinKeyEmailAuthorized(userEmail)
+  const passwordVerified = Boolean(settings?.use_builtin_key && settings?.builtin_key_password_verified)
+  const provider: ImageProvider = emailAuthorized && !admin
+    ? 'gemini'
+    : (stored.imageProvider === 'openai' ? 'openai' : 'gemini')
+  const generationMode: GenerationMode = emailAuthorized && !admin
+    ? 'batch'
+    : (stored.generationMode === 'direct' ? 'direct' : 'batch')
 
   if (provider === 'openai') {
     return {
       provider,
-      apiKey: readOpenAIImageApiKey(),
+      apiKey: (admin || passwordVerified) ? readOpenAIImageApiKey() : (stored.openaiApiKey || null),
       generationMode,
     }
   }
@@ -1126,17 +1134,6 @@ export async function POST(request: NextRequest) {
 
     const generationSettings = await getImageGenerationSettings(supabase, job.user_id, user.email)
     if (generationSettings.provider === 'openai') {
-      if (!isAdminEmail(user.email)) {
-        await supabase
-          .from('jobs')
-          .update({
-            status: 'failed',
-            error_message: 'GPT Image 2 仅管理员可使用。',
-          })
-          .eq('id', job.id)
-        return NextResponse.json({ error: 'GPT Image 2 仅管理员可使用。' }, { status: 403 })
-      }
-
       if (!generationSettings.apiKey || !isValidOpenAIApiKey(generationSettings.apiKey)) {
         await supabase
           .from('jobs')

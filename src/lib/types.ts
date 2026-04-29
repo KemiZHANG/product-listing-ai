@@ -105,6 +105,8 @@ export interface SystemSettings {
   user_id: string
   gemini_api_key_encrypted: string | null
   gemini_api_key_valid?: boolean
+  openai_api_key_encrypted?: string | null
+  openai_api_key_valid?: boolean
   builtin_key_email_authorized?: boolean
   builtin_key_authorization_note?: string | null
   is_admin?: boolean
