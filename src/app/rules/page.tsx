@@ -91,26 +91,26 @@ export default function RulesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_48%,#f1f5f9_100%)]">
       <Navbar />
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-5 border-b border-slate-200 pb-5">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Editable skills</p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-950">规则模板</h1>
-          <p className="mt-2 text-sm text-slate-500">这里存放标题、描述、图片和平台红线规则。生成时会把启用的规则合并进 prompt。</p>
+      <main className="mx-auto max-w-[1600px] px-5 py-8 sm:px-8">
+        <div className="mb-8">
+          <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Editable skills</p>
+          <h1 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">规则模板</h1>
+          <p className="mt-4 max-w-3xl text-base leading-7 text-slate-600">这里存放标题、描述、图片和平台红线规则。生成时会把启用的规则合并进 prompt。</p>
         </div>
-        {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+        {error && <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700 shadow-sm">{error}</div>}
 
-        <div className="grid gap-5 lg:grid-cols-[420px_1fr]">
-          <form onSubmit={saveRule} className="border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">{editingId ? '编辑规则' : '新增规则'}</h2>
+        <div className="grid gap-6 lg:grid-cols-[480px_1fr]">
+          <form onSubmit={saveRule} className="rounded-2xl border border-slate-200 bg-white/95 p-6 shadow-sm">
+            <h2 className="text-xl font-semibold text-slate-950">{editingId ? '编辑规则' : '新增规则'}</h2>
             <label className="mt-4 block">
-              <span className="mb-1 block text-xs font-medium text-slate-500">名称</span>
-              <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              <span className="mb-2 block text-sm font-semibold text-slate-600">名称</span>
+              <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50" />
             </label>
             <label className="mt-3 block">
-              <span className="mb-1 block text-xs font-medium text-slate-500">范围</span>
-              <select value={form.scope} onChange={(e) => setForm({ ...form, scope: e.target.value })} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+              <span className="mb-2 block text-sm font-semibold text-slate-600">范围</span>
+              <select value={form.scope} onChange={(e) => setForm({ ...form, scope: e.target.value })} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50">
                 <option value="general">通用</option>
                 <option value="title_description">标题/描述</option>
                 <option value="image">图片</option>
@@ -118,46 +118,60 @@ export default function RulesPage() {
               </select>
             </label>
             <label className="mt-3 block">
-              <span className="mb-1 block text-xs font-medium text-slate-500">规则内容</span>
-              <textarea required rows={16} value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm leading-6" />
+              <span className="mb-2 block text-sm font-semibold text-slate-600">规则内容</span>
+              <textarea required rows={16} value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm leading-6 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50" />
             </label>
             <label className="mt-3 flex items-center gap-2 text-sm text-slate-600">
               <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
               启用
             </label>
             <div className="mt-4 flex gap-2">
-              <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
+              <button className="rounded-xl bg-slate-950 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-950/15 hover:bg-slate-800">
                 保存规则
               </button>
               {editingId && (
-                <button type="button" onClick={resetForm} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                <button type="button" onClick={resetForm} className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                   取消
                 </button>
               )}
             </div>
           </form>
 
-          <section className="space-y-3">
+          <section className="rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-sm">
+            <div className="mb-4 flex items-center gap-3">
+              <h2 className="text-xl font-semibold text-slate-950">规则列表</h2>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">{rules.length} 条规则</span>
+            </div>
+            <div className="space-y-3">
             {rules.length === 0 ? (
-              <div className="border border-slate-200 bg-white p-12 text-center text-sm text-slate-500 shadow-sm">暂无规则。</div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500">暂无规则。</div>
             ) : rules.map((rule) => (
-              <article key={rule.id} className="border border-slate-200 bg-white p-4 shadow-sm">
+              <article key={rule.id} className={`rounded-2xl border bg-white p-4 shadow-sm transition-all hover:border-blue-300 ${editingId === rule.id ? 'border-blue-400 ring-2 ring-blue-100' : 'border-slate-200'}`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h2 className="font-semibold text-slate-950">{rule.name}</h2>
-                    <div className="mt-1 flex gap-2 text-xs text-slate-500">
-                      <span>{rule.scope}</span>
-                      <span>{rule.active ? '启用' : '停用'}</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="font-semibold text-slate-950">{rule.name}</h2>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                        rule.scope === 'image'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : rule.scope === 'title_description'
+                            ? 'bg-blue-50 text-blue-700'
+                            : rule.scope === 'platform'
+                              ? 'bg-violet-50 text-violet-700'
+                              : 'bg-slate-100 text-slate-600'
+                      }`}>{rule.scope}</span>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${rule.active ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700'}`}>{rule.active ? '启用' : '停用'}</span>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => editRule(rule)} className="text-sm font-medium text-blue-600">编辑</button>
-                    <button onClick={() => deleteRule(rule)} className="text-sm font-medium text-red-600">删除</button>
+                    <button onClick={() => editRule(rule)} className="rounded-lg px-3 py-1.5 text-sm font-semibold text-blue-600 hover:bg-blue-50">编辑</button>
+                    <button onClick={() => deleteRule(rule)} className="rounded-lg px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50">删除</button>
                   </div>
                 </div>
                 <p className="mt-3 line-clamp-4 whitespace-pre-wrap text-sm leading-6 text-slate-600">{rule.content}</p>
               </article>
             ))}
+            </div>
           </section>
         </div>
       </main>

@@ -75,25 +75,31 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm">
-        {/* Title */}
-        <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-gray-900">Nano Banana 生图系统</h1>
-          <p className="mt-1 text-sm text-gray-500">AI Image Generation Platform</p>
-        </div>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(254,243,199,0.7),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(191,219,254,0.6),transparent_32%),linear-gradient(135deg,#ffffff_0%,#f8fafc_52%,#eff6ff_100%)] px-4">
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.16)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.16)_1px,transparent_1px)] bg-[size:32px_32px]" />
+      <div className="pointer-events-none absolute left-16 top-16 h-44 w-36 rotate-[-12deg] rounded-3xl border border-white/80 bg-white/40 shadow-2xl shadow-slate-200/70 backdrop-blur" />
+      <div className="pointer-events-none absolute bottom-20 left-[-40px] h-64 w-72 rotate-[14deg] rounded-3xl border border-white/80 bg-white/35 shadow-2xl shadow-slate-200/70 backdrop-blur" />
+      <div className="pointer-events-none absolute right-20 top-32 h-56 w-64 rotate-[-10deg] rounded-3xl border border-white/80 bg-white/40 shadow-2xl shadow-slate-200/70 backdrop-blur" />
 
-        {/* Card */}
-        <div className="rounded-lg bg-white p-6 shadow-md">
-          {/* Tabs */}
-          <div className="mb-6 flex rounded-md bg-gray-100 p-1">
+      <div className="relative w-full max-w-xl">
+        <div className="rounded-[2rem] border border-white/80 bg-white/88 p-10 shadow-2xl shadow-slate-300/50 backdrop-blur-xl">
+          <div className="mb-8 text-center">
+            <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-amber-100 to-yellow-50 text-5xl shadow-sm ring-1 ring-amber-200/70">🍌</div>
+            <h1 className="text-4xl font-semibold tracking-tight text-slate-950">Nano Banana 生图系统</h1>
+            <p className="mt-3 text-lg text-slate-500">AI Image Generation Platform</p>
+            <p className="mt-5 inline-flex items-center rounded-full bg-slate-50 px-4 py-2 text-sm font-medium text-slate-500 ring-1 ring-slate-200">
+              当前仅开放指定账号使用。
+            </p>
+          </div>
+
+          <div className="mb-7 flex rounded-2xl bg-slate-100 p-1">
             <button
               type="button"
               onClick={() => {
                 setMode('login')
                 setError(null)
               }}
-              className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
+              className={`flex-1 rounded-xl py-3 text-base font-semibold transition-colors ${
                 mode === 'login'
                   ? 'bg-white text-gray-900 shadow-sm'
                   : 'text-gray-500 hover:text-gray-700'
@@ -107,27 +113,27 @@ export default function LoginPage() {
                 setMode('register')
                 setError(null)
               }}
-              className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
+              className={`flex-1 rounded-xl py-3 text-base font-semibold transition-colors ${
                 mode === 'register'
                   ? 'bg-white text-gray-900 shadow-sm'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              注册
+              注册（内测不可用）
             </button>
           </div>
 
           {/* Error */}
           {error && (
-            <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+            <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">
               {error}
             </div>
           )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label htmlFor="email" className="mb-1 block text-sm font-medium text-gray-700">
+              <label htmlFor="email" className="mb-2 block text-sm font-semibold text-slate-700">
                 Email
               </label>
               <input
@@ -137,12 +143,12 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-2xl border border-slate-300 px-4 py-4 text-base text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="mb-1 block text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="mb-2 block text-sm font-semibold text-slate-700">
                 Password
               </label>
               <input
@@ -153,14 +159,14 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="At least 6 characters"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-2xl border border-slate-300 px-4 py-4 text-base text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+              className="w-full rounded-2xl bg-blue-600 px-5 py-4 text-base font-semibold text-white shadow-xl shadow-blue-500/25 transition-colors hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading
                 ? mode === 'login'
@@ -171,6 +177,10 @@ export default function LoginPage() {
                   : '注册'}
             </button>
           </form>
+
+          <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-sm font-medium text-red-600">
+            当前网站还在内测优化中，暂时只允许 links358p@gmail.com 登录。
+          </div>
         </div>
       </div>
     </div>
