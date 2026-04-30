@@ -65,9 +65,11 @@ export default function ProductDashboardPage() {
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
   const importInputRef = useRef<HTMLInputElement>(null)
+  const sourceInputRef = useRef<HTMLInputElement>(null)
   const [uploadingProductId, setUploadingProductId] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [sourceDragActive, setSourceDragActive] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -169,6 +171,28 @@ export default function ProductDashboardPage() {
     if (!uploadRes.ok) {
       throw new Error(uploadData?.error || '上传原始参考图失败')
     }
+  }
+
+  const appendSourceFiles = (files: File[]) => {
+    const imageFiles = files.filter((file) => file.type.startsWith('image/'))
+    if (imageFiles.length === 0) return
+
+    setSourceFiles((previous) => {
+      const next = [...previous]
+      const seen = new Set(previous.map((file) => `${file.name}-${file.size}-${file.lastModified}`))
+      for (const file of imageFiles) {
+        const key = `${file.name}-${file.size}-${file.lastModified}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          next.push(file)
+        }
+      }
+      return next
+    })
+  }
+
+  const removeSourceFile = (fileToRemove: File) => {
+    setSourceFiles((previous) => previous.filter((file) => file !== fileToRemove))
   }
 
   const handleSave = async (event: React.FormEvent) => {
@@ -539,21 +563,75 @@ export default function ProductDashboardPage() {
               </label>
               <label className="block md:col-span-2">
                 <span className="mb-1 block text-sm font-medium text-slate-700">原始参考图（可多选）</span>
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={(event) => setSourceFiles(Array.from(event.target.files || []))}
-                  className="w-full rounded-md border border-dashed border-slate-300 px-3 py-3 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-950 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:bg-slate-50"
-                />
+                <div
+                  onClick={() => sourceInputRef.current?.click()}
+                  onDragEnter={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    setSourceDragActive(true)
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    setSourceDragActive(true)
+                  }}
+                  onDragLeave={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    setSourceDragActive(false)
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    setSourceDragActive(false)
+                    appendSourceFiles(Array.from(event.dataTransfer.files || []))
+                  }}
+                  className={`cursor-pointer rounded-lg border-2 border-dashed px-4 py-8 text-center transition-colors ${
+                    sourceDragActive
+                      ? 'border-slate-950 bg-slate-100'
+                      : 'border-slate-300 bg-slate-50 hover:border-slate-400 hover:bg-white'
+                  }`}
+                >
+                  <input
+                    ref={sourceInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onClick={(event) => {
+                      event.currentTarget.value = ''
+                    }}
+                    onChange={(event) => appendSourceFiles(Array.from(event.target.files || []))}
+                    className="hidden"
+                  />
+                  <div className="text-sm font-semibold text-slate-900">拖动图片到这里，或从本地选择</div>
+                  <div className="mt-2 text-xs text-slate-500">支持一次选择多张 JPG / PNG / WebP 图片，会追加到当前商品的参考图列表。</div>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      sourceInputRef.current?.click()
+                    }}
+                    className="mt-4 rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                  >
+                    从本地选择图片
+                  </button>
+                </div>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
                   这些图片会存到该 SKU 下，生成每个副本的 6 张图时都会作为参考图一起传入模型。多张原图可以同时参考。
                 </p>
                 {sourceFiles.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {sourceFiles.map((file) => (
-                      <span key={`${file.name}-${file.size}`} className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600">
+                      <span key={`${file.name}-${file.size}-${file.lastModified}`} className="inline-flex items-center gap-2 rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600">
                         {file.name}
+                        <button
+                          type="button"
+                          onClick={() => removeSourceFile(file)}
+                          className="font-semibold text-slate-400 hover:text-red-600"
+                          aria-label={`移除 ${file.name}`}
+                        >
+                          ×
+                        </button>
                       </span>
                     ))}
                   </div>
