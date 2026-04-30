@@ -13,27 +13,17 @@ export async function PUT(
 
   const { id } = await params
   const body = await request.json()
-  const { prompt_text, prompt_role } = body
-
-  if (!prompt_text) {
-    return NextResponse.json({ error: 'prompt_text is required' }, { status: 400 })
-  }
-
-  // Verify ownership through category
-  const { data: prompt } = await supabase
-    .from('category_prompts')
-    .select('*, categories!inner(user_id)')
-    .eq('id', id)
-    .maybeSingle()
-
-  if (!prompt || (prompt.categories as unknown as { user_id: string }).user_id !== user.id) {
-    return NextResponse.json({ error: 'Prompt not found' }, { status: 404 })
-  }
 
   const { data, error } = await supabase
-    .from('category_prompts')
-    .update({ prompt_text, prompt_role: prompt_role || 'custom' })
+    .from('rule_templates')
+    .update({
+      name: String(body.name || '').trim(),
+      scope: String(body.scope || 'general'),
+      content: String(body.content || ''),
+      active: body.active !== false,
+    })
     .eq('id', id)
+    .eq('user_id', user.id)
     .select()
     .single()
 
@@ -55,28 +45,15 @@ export async function DELETE(
   }
 
   const { id } = await params
-
-  // Verify ownership through category
-  const { data: prompt } = await supabase
-    .from('category_prompts')
-    .select('*, categories!inner(user_id)')
-    .eq('id', id)
-    .maybeSingle()
-
-  if (!prompt || (prompt.categories as unknown as { user_id: string }).user_id !== user.id) {
-    return NextResponse.json({ error: 'Prompt not found' }, { status: 404 })
-  }
-
   const { error } = await supabase
-    .from('category_prompts')
+    .from('rule_templates')
     .delete()
     .eq('id', id)
+    .eq('user_id', user.id)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
-
-  // The DB trigger handles renumbering automatically
 
   return NextResponse.json({ success: true })
 }

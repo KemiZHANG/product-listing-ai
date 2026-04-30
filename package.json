@@ -14,7 +14,8 @@
     "next": "14.2.35",
     "react": "^18",
     "react-dom": "^18",
-    "uuid": "^14.0.0"
+    "uuid": "^14.0.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^20",

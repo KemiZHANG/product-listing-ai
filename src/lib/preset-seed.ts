@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { PRESET_CATEGORIES } from './presets'
+import { defaultDetailPrompt } from './product-generation'
 
 export async function ensurePresetCategoriesForUser(
   supabase: SupabaseClient,
@@ -48,10 +49,21 @@ export async function ensurePresetCategoriesForUser(
     const categoryId = insertedBySlug.get(preset.slug)
     if (!categoryId) return []
 
-    return preset.prompts.map((prompt) => ({
+    const byNumber = new Map(preset.prompts.map((prompt) => [prompt.prompt_number, prompt.prompt_text]))
+    const prompts = [
+      { prompt_number: 1, prompt_role: 'main_1', prompt_text: byNumber.get(1) || '' },
+      { prompt_number: 2, prompt_role: 'main_2', prompt_text: byNumber.get(2) || '' },
+      { prompt_number: 3, prompt_role: 'model_scene_1', prompt_text: byNumber.get(3) || '' },
+      { prompt_number: 4, prompt_role: 'model_scene_2', prompt_text: byNumber.get(5) || byNumber.get(4) || '' },
+      { prompt_number: 5, prompt_role: 'detail_1', prompt_text: defaultDetailPrompt(preset.name_zh, 1) },
+      { prompt_number: 6, prompt_role: 'detail_2', prompt_text: defaultDetailPrompt(preset.name_zh, 2) },
+    ]
+
+    return prompts.map((prompt) => ({
       category_id: categoryId,
-        prompt_number: prompt.prompt_number,
-        prompt_text: prompt.prompt_text,
+      prompt_number: prompt.prompt_number,
+      prompt_role: prompt.prompt_role,
+      prompt_text: prompt.prompt_text,
     }))
   })
 

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { isAllowedAppEmail } from '@/lib/access-control'
 
 type Mode = 'login' | 'register'
 
@@ -38,11 +39,15 @@ export default function LoginPage() {
 
     try {
       if (mode === 'login') {
-        const { error: err } = await supabase.auth.signInWithPassword({
+        const { data, error: err } = await supabase.auth.signInWithPassword({
           email,
           password,
         })
         if (err) throw err
+        if (!isAllowedAppEmail(data.user?.email)) {
+          await supabase.auth.signOut()
+          throw new Error('当前网站还在内测优化中，暂时只允许 links358p@gmail.com 登录。')
+        }
       } else {
         const registerRes = await fetch('/api/auth/register', {
           method: 'POST',

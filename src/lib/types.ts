@@ -26,6 +26,7 @@ export interface CategoryPrompt {
   id: string
   category_id: string
   prompt_number: number
+  prompt_role?: string
   prompt_text: string
   created_at: string
   updated_at: string
@@ -117,6 +118,108 @@ export interface SystemSettings {
   created_at: string
   updated_at: string
 }
+
+export interface ProductAttributeColumn {
+  id: string
+  user_id: string
+  name: string
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ProductImage {
+  id: string
+  product_id: string
+  original_filename: string
+  display_name: string
+  storage_path: string
+  sort_order: number
+  created_at: string
+}
+
+export type ProductStatus = 'draft' | 'ready' | 'queued' | 'generating' | 'completed' | 'failed' | 'needs_review'
+
+export interface Product {
+  id: string
+  user_id: string
+  category_id: string | null
+  sku: string
+  source_title: string
+  source_description: string
+  selling_points: string
+  copy_count: number
+  languages: string[]
+  attributes: Record<string, string>
+  status: ProductStatus
+  error_message: string | null
+  created_at: string
+  updated_at: string
+  categories?: Pick<Category, 'id' | 'name_zh' | 'slug' | 'icon'> | null
+  images?: ProductImage[]
+  copy_count_generated?: number
+}
+
+export interface RuleTemplate {
+  id: string
+  user_id: string
+  name: string
+  scope: 'general' | 'title_description' | 'image' | 'platform'
+  content: string
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ProductCopyImage {
+  id: string
+  copy_id: string
+  prompt_number: number
+  prompt_role: string
+  prompt_text: string
+  output_storage_path: string | null
+  output_filename: string | null
+  status: 'queued' | 'generating' | 'completed' | 'failed' | 'needs_review'
+  error_message: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ProductCopy {
+  id: string
+  product_id: string
+  user_id: string
+  sku: string
+  copy_index: number
+  language_code: string
+  language_label: string
+  generated_title: string
+  generated_description: string
+  status: 'queued' | 'generating' | 'completed' | 'failed' | 'needs_review'
+  error_message: string | null
+  created_at: string
+  updated_at: string
+  products?: Product | null
+  product_copy_images?: ProductCopyImage[]
+}
+
+export const PRODUCT_LANGUAGES = [
+  { code: 'en', label: '英语' },
+  { code: 'ms', label: '马来语' },
+  { code: 'fil', label: '菲律宾语' },
+  { code: 'id', label: '印尼语' },
+  { code: 'th', label: '泰语' },
+  { code: 'vi', label: '越南语' },
+]
+
+export const DEFAULT_PROMPT_ROLES = [
+  { value: 'main_1', label: '主图 1' },
+  { value: 'main_2', label: '主图 2' },
+  { value: 'model_scene_1', label: '模特/使用场景图 1' },
+  { value: 'model_scene_2', label: '模特/使用场景图 2' },
+  { value: 'detail_1', label: '商品详情图 1' },
+  { value: 'detail_2', label: '商品详情图 2' },
+]
 
 export const CATEGORY_ICONS = [
   '🧴', '🧼', '🪥', '💄', '👁️', '👶', '🧖', '💅',

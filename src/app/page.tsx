@@ -1,46 +1,72 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import ConfirmDialog from '@/components/ConfirmDialog'
 import Navbar from '@/components/Navbar'
 import { apiFetch } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
-import type { Category } from '@/lib/types'
+import { PRODUCT_LANGUAGES } from '@/lib/types'
+import type { Category, Product, ProductAttributeColumn } from '@/lib/types'
 
-type NewCategoryForm = {
-  name_zh: string
-  slug: string
-  icon: string
+type ProductForm = {
+  id?: string
+  sku: string
+  category_id: string
+  source_title: string
+  source_description: string
+  selling_points: string
+  copy_count: number
+  languages: string[]
+  attributes: Record<string, string>
 }
 
-function slugify(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+const emptyForm: ProductForm = {
+  sku: '',
+  category_id: '',
+  source_title: '',
+  source_description: '',
+  selling_points: '',
+  copy_count: 1,
+  languages: ['en'],
+  attributes: {},
 }
 
-export default function DashboardPage() {
+function normalizeForm(product?: Product | null): ProductForm {
+  if (!product) return emptyForm
+  return {
+    id: product.id,
+    sku: product.sku,
+    category_id: product.category_id || '',
+    source_title: product.source_title || '',
+    source_description: product.source_description || '',
+    selling_points: product.selling_points || '',
+    copy_count: product.copy_count || 1,
+    languages: product.languages?.length ? product.languages : ['en'],
+    attributes: product.attributes || {},
+  }
+}
+
+export default function ProductDashboardPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
-  const [categoriesLoading, setCategoriesLoading] = useState(false)
+  const [fetching, setFetching] = useState(false)
+  const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [columns, setColumns] = useState<ProductAttributeColumn[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [running, setRunning] = useState(false)
-  const [showNewModal, setShowNewModal] = useState(false)
-  const [newForm, setNewForm] = useState<NewCategoryForm>({ name_zh: '', slug: '', icon: '📦' })
-  const [creating, setCreating] = useState(false)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [formOpen, setFormOpen] = useState(false)
+  const [form, setForm] = useState<ProductForm>(emptyForm)
+  const [saving, setSaving] = useState(false)
+  const [newColumnName, setNewColumnName] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [confirmDialog, setConfirmDialog] = useState<{
-    isOpen: boolean
-    title: string
-    message: string
-    onConfirm: () => void
-  }>({ isOpen: false, title: '', message: '', onConfirm: () => {} })
+  const [generating, setGenerating] = useState(false)
+  const [upgradingPrompts, setUpgradingPrompts] = useState(false)
+  const [imageUrls, setImageUrls] = useState<Record<string, string>>({})
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const importInputRef = useRef<HTMLInputElement>(null)
+  const [uploadingProductId, setUploadingProductId] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -52,152 +78,236 @@ export default function DashboardPage() {
     })
   }, [router])
 
-  const fetchCategories = useCallback(async () => {
-    const cacheKey = 'nano-banana:categories'
-    const cached = window.sessionStorage.getItem(cacheKey)
-    if (cached) {
-      try {
-        setCategories(JSON.parse(cached))
-      } catch {
-        window.sessionStorage.removeItem(cacheKey)
-      }
-    }
-
-    setCategoriesLoading(true)
+  const fetchAll = useCallback(async () => {
+    setFetching(true)
+    setError(null)
     try {
-      const res = await apiFetch('/api/categories')
-      const data = await res.json().catch(() => null)
-      if (!res.ok) {
-        setError(data?.error || '类目加载失败，请刷新页面重试。')
-        return
-      }
+      const [productsRes, categoriesRes, columnsRes] = await Promise.all([
+        apiFetch('/api/products?limit=120'),
+        apiFetch('/api/categories'),
+        apiFetch('/api/product-attributes'),
+      ])
 
-      setCategories(data)
-      window.sessionStorage.setItem(cacheKey, JSON.stringify(data))
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '类目加载失败，请刷新页面重试。')
+      const [productsData, categoriesData, columnsData] = await Promise.all([
+        productsRes.json().catch(() => null),
+        categoriesRes.json().catch(() => null),
+        columnsRes.json().catch(() => null),
+      ])
+
+      if (!productsRes.ok) throw new Error(productsData?.error || '商品加载失败')
+      if (!categoriesRes.ok) throw new Error(categoriesData?.error || '类目加载失败')
+      if (!columnsRes.ok) throw new Error(columnsData?.error || '属性列加载失败')
+
+      setProducts(productsData || [])
+      setCategories(categoriesData || [])
+      setColumns(columnsData || [])
+
+      const paths = (productsData || []).flatMap((product: Product) =>
+        (product.images || []).slice(0, 4).map((image) => image.storage_path)
+      )
+      const signedUrls = await Promise.all(
+        paths.map(async (path: string) => {
+          const { data } = await supabase.storage.from('images').createSignedUrl(path, 60 * 60)
+          return [path, data?.signedUrl || ''] as const
+        })
+      )
+      setImageUrls(Object.fromEntries(signedUrls))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载失败')
     } finally {
-      setCategoriesLoading(false)
+      setFetching(false)
     }
   }, [])
 
   useEffect(() => {
-    if (!loading) {
-      fetchCategories()
-    }
-  }, [loading, fetchCategories])
+    if (!loading) fetchAll()
+  }, [loading, fetchAll])
 
   const stats = useMemo(() => {
-    const prompts = categories.reduce((sum, category) => sum + (category.prompt_count ?? 0), 0)
-    const images = categories.reduce((sum, category) => sum + (category.image_count ?? 0), 0)
-    const jobs = categories.reduce(
-      (sum, category) => sum + (category.prompt_count ?? 0) * (category.image_count ?? 0),
-      0
-    )
-    return { prompts, images, jobs }
-  }, [categories])
+    const imageCount = products.reduce((sum, product) => sum + (product.images?.length || 0), 0)
+    const copyTarget = products.reduce((sum, product) => sum + product.copy_count * (product.languages?.length || 1), 0)
+    return { imageCount, copyTarget }
+  }, [products])
 
-  const toggleSelect = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev)
+  const toggleSelected = (id: string) => {
+    setSelected((previous) => {
+      const next = new Set(previous)
       if (next.has(id)) next.delete(id)
       else next.add(id)
       return next
     })
   }
 
-  const handleRun = async () => {
-    if (selected.size === 0) return
-    setRunning(true)
-    setError(null)
-    try {
-      const res = await apiFetch('/api/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category_ids: Array.from(selected) }),
-      })
-      const data = await res.json().catch(() => null)
-      if (!res.ok) {
-        throw new Error(data?.error || '创建任务失败。')
-      }
-      router.push('/jobs')
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '发生未知错误。')
-    } finally {
-      setRunning(false)
-    }
+  const openCreate = () => {
+    setForm(emptyForm)
+    setFormOpen(true)
   }
 
-  const handleCreate = async (event: React.FormEvent) => {
+  const openEdit = (product: Product) => {
+    setForm(normalizeForm(product))
+    setFormOpen(true)
+  }
+
+  const handleSave = async (event: React.FormEvent) => {
     event.preventDefault()
-    setCreating(true)
+    setSaving(true)
     setError(null)
     try {
-      const form = {
-        ...newForm,
-        slug: slugify(newForm.slug),
-        icon: newForm.icon.trim() || '📦',
+      const payload = {
+        ...form,
+        category_id: form.category_id || null,
+        copy_count: Number(form.copy_count || 1),
       }
-      const res = await apiFetch('/api/categories', {
-        method: 'POST',
+      const res = await apiFetch(form.id ? `/api/products/${form.id}` : '/api/products', {
+        method: form.id ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       })
       const data = await res.json().catch(() => null)
-      if (!res.ok) {
-        throw new Error(data?.error || '创建类目失败。')
-      }
-
-      setShowNewModal(false)
-      setNewForm({ name_zh: '', slug: '', icon: '📦' })
-      window.sessionStorage.removeItem('nano-banana:categories')
-      await fetchCategories()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '发生未知错误。')
+      if (!res.ok) throw new Error(data?.error || '保存商品失败')
+      setFormOpen(false)
+      await fetchAll()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存商品失败')
     } finally {
-      setCreating(false)
+      setSaving(false)
     }
   }
 
-  const askDeleteCategory = (category: Category) => {
-    setConfirmDialog({
-      isOpen: true,
-      title: '删除类目',
-      message: `确定删除「${category.name_zh}」吗？该类目下的 prompts 和产品图片记录会一起删除，此操作不可撤销。`,
-      onConfirm: async () => {
-        setDeletingId(category.id)
-        setError(null)
-        try {
-          const res = await apiFetch(`/api/categories/${category.id}`, { method: 'DELETE' })
-          const data = await res.json().catch(() => null)
-          if (!res.ok) {
-            throw new Error(data?.error || '删除类目失败。')
-          }
-
-          setSelected((prev) => {
-            const next = new Set(prev)
-            next.delete(category.id)
-            return next
-          })
-          window.sessionStorage.removeItem('nano-banana:categories')
-          window.sessionStorage.removeItem(`nano-banana:category:${category.slug}`)
-          await fetchCategories()
-        } catch (err: unknown) {
-          setError(err instanceof Error ? err.message : '删除类目失败。')
-        } finally {
-          setDeletingId(null)
-          setConfirmDialog((prev) => ({ ...prev, isOpen: false }))
-        }
-      },
+  const handleDelete = async (product: Product) => {
+    if (!window.confirm(`确定删除 SKU ${product.sku} 吗？`)) return
+    setError(null)
+    const res = await apiFetch(`/api/products/${product.id}`, { method: 'DELETE' })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) {
+      setError(data?.error || '删除商品失败')
+      return
+    }
+    setSelected((previous) => {
+      const next = new Set(previous)
+      next.delete(product.id)
+      return next
     })
+    await fetchAll()
+  }
+
+  const handleAddColumn = async () => {
+    if (!newColumnName.trim()) return
+    setError(null)
+    const res = await apiFetch('/api/product-attributes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newColumnName.trim() }),
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) {
+      setError(data?.error || '新增属性失败')
+      return
+    }
+    setNewColumnName('')
+    await fetchAll()
+  }
+
+  const handleDeleteColumn = async (column: ProductAttributeColumn) => {
+    if (!window.confirm(`确定删除属性列「${column.name}」吗？已填写的商品属性值不会自动清理。`)) return
+    const res = await apiFetch(`/api/product-attributes/${column.id}`, { method: 'DELETE' })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) {
+      setError(data?.error || '删除属性失败')
+      return
+    }
+    await fetchAll()
+  }
+
+  const handleUploadClick = (productId: string) => {
+    setUploadingProductId(productId)
+    fileInputRef.current?.click()
+  }
+
+  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files
+    if (!files || !uploadingProductId) return
+    const formData = new FormData()
+    Array.from(files).forEach((file) => formData.append('files', file))
+    const res = await apiFetch(`/api/products/${uploadingProductId}/images`, {
+      method: 'POST',
+      body: formData,
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) setError(data?.error || '上传图片失败')
+    event.target.value = ''
+    setUploadingProductId(null)
+    await fetchAll()
+  }
+
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setImporting(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await apiFetch('/api/products/import', {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error || '导入失败')
+
+      const warningText = data?.warnings?.length ? `；提醒：${data.warnings.join('；')}` : ''
+      setNotice(`导入完成：新增 ${data.created} 个，更新 ${data.updated} 个，跳过 ${data.failed} 行，新增属性列 ${data.attributes_created} 个${warningText}`)
+      await fetchAll()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '导入失败')
+    } finally {
+      event.target.value = ''
+      setImporting(false)
+    }
+  }
+
+  const handleGenerate = async () => {
+    if (selected.size === 0) return
+    setGenerating(true)
+    setError(null)
+    try {
+      const res = await apiFetch('/api/product-copies/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_ids: Array.from(selected) }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error || '创建生成任务失败')
+      router.push('/product-outputs')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '创建生成任务失败')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const handleUpgradePrompts = async () => {
+    if (!window.confirm('这会把现有类目 prompts 迁移成 6 条：主图2条、场景2条、详情2条。确定继续吗？')) return
+    setUpgradingPrompts(true)
+    setError(null)
+    try {
+      const res = await apiFetch('/api/categories/upgrade-prompts', { method: 'POST' })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error || '升级类目指令失败')
+      await fetchAll()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '升级类目指令失败')
+    } finally {
+      setUpgradingPrompts(false)
+    }
   }
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <div className="rounded-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm">
-          Loading...
-        </div>
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">
+        Loading...
       </div>
     )
   }
@@ -205,213 +315,259 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-slate-50">
       <Navbar />
-
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <section className="mb-6 rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-5 px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
+      <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
+        <section className="mb-5 border-b border-slate-200 pb-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Dashboard</p>
-              <h1 className="mt-1 text-2xl font-semibold text-slate-950">类目管理</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                管理电商生图类目、产品图片和 prompts。预置类目现在也可以删除，删除后不会自动恢复。
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Product workflow</p>
+              <h1 className="mt-1 text-2xl font-semibold text-slate-950">商品素材生成工作台</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                每一行是一个商品。选择类目后会调用该类目的 6 条图片指令，并按 SKU、语言、副本序号生成商品图、标题和描述。
               </p>
             </div>
-
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-2">
               <button
-                onClick={handleRun}
-                disabled={selected.size === 0 || running}
-                className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={handleUpgradePrompts}
+                disabled={upgradingPrompts}
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-white disabled:opacity-50"
               >
-                {running ? '提交中...' : `运行已选类目 (${selected.size})`}
+                {upgradingPrompts ? '升级中...' : '升级类目 6 指令'}
+              </button>
+              <button onClick={openCreate} className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
+                新增商品
               </button>
               <button
-                onClick={() => setShowNewModal(true)}
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
+                onClick={() => importInputRef.current?.click()}
+                disabled={importing}
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-white disabled:opacity-50"
               >
-                新建类目
+                {importing ? '导入中...' : '导入 Excel/CSV'}
+              </button>
+              <button
+                onClick={handleGenerate}
+                disabled={selected.size === 0 || generating}
+                className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {generating ? '创建中...' : `生成已选商品 (${selected.size})`}
               </button>
             </div>
           </div>
-
-          <div className="grid border-t border-slate-100 sm:grid-cols-4">
-            <div className="border-b border-slate-100 px-5 py-4 sm:border-b-0 sm:border-r">
-              <div className="text-2xl font-semibold text-slate-950">{categories.length}</div>
-              <div className="mt-1 text-xs text-slate-500">类目</div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-4">
+            <div className="border-l-2 border-slate-900 bg-white px-4 py-3 shadow-sm">
+              <div className="text-2xl font-semibold">{products.length}</div>
+              <div className="text-xs text-slate-500">商品</div>
             </div>
-            <div className="border-b border-slate-100 px-5 py-4 sm:border-b-0 sm:border-r">
-              <div className="text-2xl font-semibold text-slate-950">{stats.prompts}</div>
-              <div className="mt-1 text-xs text-slate-500">Prompts</div>
+            <div className="border-l-2 border-emerald-600 bg-white px-4 py-3 shadow-sm">
+              <div className="text-2xl font-semibold">{stats.imageCount}</div>
+              <div className="text-xs text-slate-500">原始参考图</div>
             </div>
-            <div className="border-b border-slate-100 px-5 py-4 sm:border-b-0 sm:border-r">
-              <div className="text-2xl font-semibold text-slate-950">{stats.images}</div>
-              <div className="mt-1 text-xs text-slate-500">产品图片</div>
+            <div className="border-l-2 border-blue-600 bg-white px-4 py-3 shadow-sm">
+              <div className="text-2xl font-semibold">{stats.copyTarget}</div>
+              <div className="text-xs text-slate-500">计划副本</div>
             </div>
-            <div className="px-5 py-4">
-              <div className="text-2xl font-semibold text-slate-950">{stats.jobs}</div>
-              <div className="mt-1 text-xs text-slate-500">预计出图数</div>
+            <div className="border-l-2 border-amber-500 bg-white px-4 py-3 shadow-sm">
+              <div className="text-2xl font-semibold">{columns.length}</div>
+              <div className="text-xs text-slate-500">全局属性列</div>
             </div>
           </div>
         </section>
 
-        {error && (
-          <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
+        {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+        {notice && <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{notice}</div>}
 
-        <div className="mb-4 flex items-center justify-between">
-          <div className="text-sm text-slate-500">
-            {categoriesLoading ? '正在同步最新类目...' : `共 ${categories.length} 个类目`}
-          </div>
-          {selected.size > 0 && (
-            <button
-              onClick={() => setSelected(new Set())}
-              className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
-            >
-              清空选择
+        <section className="mb-4 flex flex-col gap-3 border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={newColumnName}
+              onChange={(event) => setNewColumnName(event.target.value)}
+              placeholder="新增全局属性，如品牌/材质/颜色"
+              className="w-72 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-900 focus:outline-none"
+            />
+            <button onClick={handleAddColumn} className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              添加属性列
             </button>
-          )}
-        </div>
-
-        {categoriesLoading && categories.length === 0 ? (
-          <div className="rounded-lg border border-slate-200 bg-white p-12 text-center shadow-sm">
-            <p className="text-sm text-slate-500">类目加载中...</p>
           </div>
-        ) : categories.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-slate-300 bg-white p-12 text-center">
-            <h2 className="text-base font-semibold text-slate-900">暂无类目</h2>
-            <p className="mt-2 text-sm text-slate-500">点击“新建类目”开始创建自己的 prompt 工作区。</p>
+          <div className="flex flex-wrap gap-2">
+            {columns.map((column) => (
+              <button
+                key={column.id}
+                onClick={() => handleDeleteColumn(column)}
+                className="rounded-md bg-slate-100 px-2.5 py-1 text-xs text-slate-600 hover:bg-red-50 hover:text-red-600"
+                title="点击删除属性列"
+              >
+                {column.name}
+              </button>
+            ))}
           </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {categories.map((category) => {
-              const isSelected = selected.has(category.id)
-              const isDeleting = deletingId === category.id
+        </section>
 
-              return (
-                <article
-                  key={category.id}
-                  className={`group rounded-lg border bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md ${
-                    isSelected ? 'border-blue-300 ring-2 ring-blue-100' : 'border-slate-200'
-                  }`}
-                >
-                  <div className="mb-4 flex items-start justify-between gap-3">
-                    <button
-                      onClick={() => toggleSelect(category.id)}
-                      className={`flex h-8 w-8 items-center justify-center rounded-md border text-sm transition-colors ${
-                        isSelected
-                          ? 'border-blue-500 bg-blue-600 text-white'
-                          : 'border-slate-200 bg-white text-slate-400 hover:border-blue-300 hover:text-blue-600'
-                      }`}
-                      aria-label={isSelected ? '取消选择类目' : '选择类目'}
-                    >
-                      {isSelected ? '✓' : ''}
-                    </button>
-
-                    <button
-                      onClick={() => askDeleteCategory(category)}
-                      disabled={isDeleting}
-                      className="rounded-md px-2 py-1 text-xs font-medium text-red-500 opacity-80 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {isDeleting ? '删除中' : '删除'}
-                    </button>
-                  </div>
-
-                  <Link href={`/category/${category.slug}`} className="block">
-                    <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-md bg-slate-100 text-2xl">
-                      {category.icon}
-                    </div>
-                    <h3 className="line-clamp-1 text-base font-semibold text-slate-950">
-                      {category.name_zh}
-                    </h3>
-                    <p className="mt-1 line-clamp-1 text-xs text-slate-400">/{category.slug}</p>
-
-                    <div className="mt-4 grid grid-cols-2 gap-2">
-                      <div className="rounded-md bg-slate-50 px-3 py-2">
-                        <div className="text-sm font-semibold text-slate-900">{category.prompt_count ?? 0}</div>
-                        <div className="mt-0.5 text-[11px] text-slate-500">Prompts</div>
+        <section className="overflow-hidden border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-100 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="w-10 px-3 py-3"></th>
+                  <th className="px-3 py-3">SKU</th>
+                  <th className="px-3 py-3">原图</th>
+                  <th className="min-w-[220px] px-3 py-3">原始标题</th>
+                  <th className="min-w-[260px] px-3 py-3">原始描述</th>
+                  <th className="px-3 py-3">类目</th>
+                  <th className="px-3 py-3">副本/语言</th>
+                  {columns.map((column) => <th key={column.id} className="px-3 py-3">{column.name}</th>)}
+                  <th className="px-3 py-3">状态</th>
+                  <th className="px-3 py-3">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {products.length === 0 ? (
+                  <tr>
+                    <td colSpan={10 + columns.length} className="px-4 py-14 text-center text-slate-500">
+                      还没有商品。先新增一个 SKU，上传原图，再选择类目生成。
+                    </td>
+                  </tr>
+                ) : products.map((product) => (
+                  <tr key={product.id} className="align-top hover:bg-slate-50">
+                    <td className="px-3 py-3">
+                      <input type="checkbox" checked={selected.has(product.id)} onChange={() => toggleSelected(product.id)} />
+                    </td>
+                    <td className="px-3 py-3 font-mono text-xs font-semibold text-slate-900">{product.sku}</td>
+                    <td className="px-3 py-3">
+                      <div className="flex max-w-[180px] flex-wrap gap-1.5">
+                        {(product.images || []).slice(0, 4).map((image) => (
+                          <img
+                            key={image.id}
+                            src={imageUrls[image.storage_path]}
+                            alt={image.display_name}
+                            className="h-10 w-10 rounded border border-slate-200 object-cover"
+                          />
+                        ))}
+                        <button onClick={() => handleUploadClick(product.id)} className="h-10 w-10 rounded border border-dashed border-slate-300 text-xs text-slate-500 hover:bg-slate-50">
+                          +
+                        </button>
                       </div>
-                      <div className="rounded-md bg-slate-50 px-3 py-2">
-                        <div className="text-sm font-semibold text-slate-900">{category.image_count ?? 0}</div>
-                        <div className="mt-0.5 text-[11px] text-slate-500">Images</div>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="line-clamp-3 max-w-[260px] text-slate-700">{product.source_title || '未填写'}</div>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="line-clamp-4 max-w-[320px] text-slate-500">{product.source_description || '未填写'}</div>
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {product.categories ? `${product.categories.icon} ${product.categories.name_zh}` : <span className="text-red-500">未选择</span>}
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="whitespace-nowrap text-slate-700">{product.copy_count} 组</div>
+                      <div className="mt-1 max-w-[180px] text-xs text-slate-500">
+                        {(product.languages || []).map((code) => PRODUCT_LANGUAGES.find((item) => item.code === code)?.label || code).join('、')}
                       </div>
-                    </div>
-                  </Link>
-                </article>
-              )
-            })}
+                    </td>
+                    {columns.map((column) => (
+                      <td key={column.id} className="px-3 py-3 text-slate-500">
+                        <div className="line-clamp-2 min-w-[120px]">{product.attributes?.[column.name] || '-'}</div>
+                      </td>
+                    ))}
+                    <td className="px-3 py-3">
+                      <span className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">{product.status}</span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex gap-2">
+                        <button onClick={() => openEdit(product)} className="text-sm font-medium text-blue-600 hover:text-blue-800">编辑</button>
+                        <button onClick={() => handleDelete(product)} className="text-sm font-medium text-red-600 hover:text-red-800">删除</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        )}
+        </section>
+        {fetching && <p className="mt-3 text-xs text-slate-400">正在刷新商品数据...</p>}
       </main>
 
-      {showNewModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          <div className="fixed inset-0 bg-slate-950/50" onClick={() => setShowNewModal(false)} />
-          <div className="relative z-10 w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-slate-950">新建类目</h3>
-            <p className="mt-1 text-sm text-slate-500">创建一个新的类目工作区，再为它添加 prompts 和产品图片。</p>
+      <input ref={fileInputRef} type="file" multiple accept="image/*" className="hidden" onChange={handleUpload} />
+      <input ref={importInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImport} />
 
-            <form onSubmit={handleCreate} className="mt-5 space-y-4">
+      {formOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+          <form onSubmit={handleSave} className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-md bg-white shadow-xl">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <h2 className="text-lg font-semibold text-slate-950">{form.id ? '编辑商品' : '新增商品'}</h2>
+            </div>
+            <div className="grid gap-4 px-5 py-5 md:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-slate-700">SKU（唯一）</span>
+                <input required value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-slate-700">商品类目</span>
+                <select required value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                  <option value="">请选择类目</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>{category.icon} {category.name_zh}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block md:col-span-2">
+                <span className="mb-1 block text-sm font-medium text-slate-700">原始标题</span>
+                <input value={form.source_title} onChange={(e) => setForm({ ...form, source_title: e.target.value })} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="mb-1 block text-sm font-medium text-slate-700">原始描述</span>
+                <textarea rows={5} value={form.source_description} onChange={(e) => setForm({ ...form, source_description: e.target.value })} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="block md:col-span-2">
+                <span className="mb-1 block text-sm font-medium text-slate-700">卖点补充（可空）</span>
+                <textarea rows={3} value={form.selling_points} onChange={(e) => setForm({ ...form, selling_points: e.target.value })} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-slate-700">每种语言副本数</span>
+                <input type="number" min={1} max={20} value={form.copy_count} onChange={(e) => setForm({ ...form, copy_count: Number(e.target.value) })} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </label>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">类目名称</label>
-                <input
-                  required
-                  value={newForm.name_zh}
-                  onChange={(event) => setNewForm((form) => ({ ...form, name_zh: event.target.value }))}
-                  placeholder="例如：护肤品"
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
+                <span className="mb-2 block text-sm font-medium text-slate-700">副本语言</span>
+                <div className="flex flex-wrap gap-2">
+                  {PRODUCT_LANGUAGES.map((language) => (
+                    <label key={language.code} className="flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={form.languages.includes(language.code)}
+                        onChange={() => {
+                          const next = form.languages.includes(language.code)
+                            ? form.languages.filter((code) => code !== language.code)
+                            : [...form.languages, language.code]
+                          setForm({ ...form, languages: next.length ? next : ['en'] })
+                        }}
+                      />
+                      {language.label}
+                    </label>
+                  ))}
+                </div>
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Slug</label>
-                <input
-                  required
-                  value={newForm.slug}
-                  onChange={(event) => setNewForm((form) => ({ ...form, slug: event.target.value }))}
-                  onBlur={() => setNewForm((form) => ({ ...form, slug: slugify(form.slug) }))}
-                  placeholder="例如：skincare"
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Icon</label>
-                <input
-                  value={newForm.icon}
-                  onChange={(event) => setNewForm((form) => ({ ...form, icon: event.target.value }))}
-                  placeholder="emoji icon"
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowNewModal(false)}
-                  className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  disabled={creating}
-                  className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {creating ? '创建中...' : '创建'}
-                </button>
-              </div>
-            </form>
-          </div>
+              {columns.map((column) => (
+                <label key={column.id} className="block">
+                  <span className="mb-1 block text-sm font-medium text-slate-700">{column.name}</span>
+                  <input
+                    value={form.attributes[column.name] || ''}
+                    onChange={(e) => setForm({
+                      ...form,
+                      attributes: { ...form.attributes, [column.name]: e.target.value },
+                    })}
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="flex justify-end gap-3 border-t border-slate-200 px-5 py-4">
+              <button type="button" onClick={() => setFormOpen(false)} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                取消
+              </button>
+              <button disabled={saving} className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50">
+                {saving ? '保存中...' : '保存商品'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
-
-      <ConfirmDialog
-        isOpen={confirmDialog.isOpen}
-        title={confirmDialog.title}
-        message={confirmDialog.message}
-        onConfirm={confirmDialog.onConfirm}
-        onCancel={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
-      />
     </div>
   )
 }

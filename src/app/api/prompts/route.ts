@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { category_id, prompt_text } = body
+  const { category_id, prompt_text, prompt_role } = body
 
   if (!category_id || !prompt_text) {
     return NextResponse.json({ error: 'category_id and prompt_text are required' }, { status: 400 })
@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
     .insert({
       category_id,
       prompt_number: nextNumber,
+      prompt_role: prompt_role || 'custom',
       prompt_text,
     })
     .select()
