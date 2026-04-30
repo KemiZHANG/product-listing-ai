@@ -56,6 +56,7 @@ export default function ProductDashboardPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [formOpen, setFormOpen] = useState(false)
   const [form, setForm] = useState<ProductForm>(emptyForm)
+  const [sourceFiles, setSourceFiles] = useState<File[]>([])
   const [saving, setSaving] = useState(false)
   const [newColumnName, setNewColumnName] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -140,12 +141,34 @@ export default function ProductDashboardPage() {
 
   const openCreate = () => {
     setForm(emptyForm)
+    setSourceFiles([])
     setFormOpen(true)
   }
 
   const openEdit = (product: Product) => {
     setForm(normalizeForm(product))
+    setSourceFiles([])
     setFormOpen(true)
+  }
+
+  const closeForm = () => {
+    setFormOpen(false)
+    setSourceFiles([])
+  }
+
+  const uploadProductImages = async (productId: string, files: File[]) => {
+    if (files.length === 0) return
+
+    const imageFormData = new FormData()
+    files.forEach((file) => imageFormData.append('files', file))
+    const uploadRes = await apiFetch(`/api/products/${productId}/images`, {
+      method: 'POST',
+      body: imageFormData,
+    })
+    const uploadData = await uploadRes.json().catch(() => null)
+    if (!uploadRes.ok) {
+      throw new Error(uploadData?.error || '上传原始参考图失败')
+    }
   }
 
   const handleSave = async (event: React.FormEvent) => {
@@ -165,7 +188,9 @@ export default function ProductDashboardPage() {
       })
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(data?.error || '保存商品失败')
-      setFormOpen(false)
+
+      await uploadProductImages(data.id, sourceFiles)
+      closeForm()
       await fetchAll()
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存商品失败')
@@ -270,6 +295,11 @@ export default function ProductDashboardPage() {
 
   const handleGenerate = async () => {
     if (selected.size === 0) return
+    const productsWithoutImages = products.filter((product) => selected.has(product.id) && (product.images || []).length === 0)
+    if (productsWithoutImages.length > 0) {
+      setError(`这些 SKU 还没有上传原始参考图，不能生图：${productsWithoutImages.map((product) => product.sku).join('、')}`)
+      return
+    }
     setGenerating(true)
     setError(null)
     try {
@@ -508,6 +538,28 @@ export default function ProductDashboardPage() {
                 </select>
               </label>
               <label className="block md:col-span-2">
+                <span className="mb-1 block text-sm font-medium text-slate-700">原始参考图（可多选）</span>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={(event) => setSourceFiles(Array.from(event.target.files || []))}
+                  className="w-full rounded-md border border-dashed border-slate-300 px-3 py-3 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-950 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:bg-slate-50"
+                />
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  这些图片会存到该 SKU 下，生成每个副本的 6 张图时都会作为参考图一起传入模型。多张原图可以同时参考。
+                </p>
+                {sourceFiles.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {sourceFiles.map((file) => (
+                      <span key={`${file.name}-${file.size}`} className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600">
+                        {file.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </label>
+              <label className="block md:col-span-2">
                 <span className="mb-1 block text-sm font-medium text-slate-700">原始标题</span>
                 <input value={form.source_title} onChange={(e) => setForm({ ...form, source_title: e.target.value })} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
               </label>
@@ -558,7 +610,7 @@ export default function ProductDashboardPage() {
               ))}
             </div>
             <div className="flex justify-end gap-3 border-t border-slate-200 px-5 py-4">
-              <button type="button" onClick={() => setFormOpen(false)} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              <button type="button" onClick={closeForm} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
                 取消
               </button>
               <button disabled={saving} className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50">
