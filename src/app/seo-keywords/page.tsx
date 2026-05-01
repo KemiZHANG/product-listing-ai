@@ -50,8 +50,10 @@ export default function SeoKeywordsPage() {
   const [draft, setDraft] = useState<KeywordDraft>(emptyDraft)
   const [bulkText, setBulkText] = useState('')
   const [saving, setSaving] = useState(false)
+  const [suggesting, setSuggesting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [seedText, setSeedText] = useState('')
   const [previewTitle, setPreviewTitle] = useState('')
   const [previewDescription, setPreviewDescription] = useState('')
 
@@ -195,6 +197,38 @@ export default function SeoKeywordsPage() {
     }
   }
 
+  const suggestKeywords = async (mode: 'replace' | 'append') => {
+    if (!categoryId) {
+      setError('请先选择类目')
+      return
+    }
+
+    setSuggesting(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const res = await apiFetch('/api/seo-keywords/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category_id: categoryId,
+          language_code: languageCode,
+          seed_text: seedText,
+        }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error || 'AI 生成关键词建议失败')
+
+      const suggested = Array.isArray(data?.keywords) ? data.keywords : []
+      setKeywords((previous) => mode === 'append' ? [...previous, ...suggested] : suggested)
+      setNotice(`已生成 ${suggested.length} 个关键词建议。请检查后点击“保存关键词库”，保存后才会被商品生成调用。`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'AI 生成关键词建议失败')
+    } finally {
+      setSuggesting(false)
+    }
+  }
+
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">Loading...</div>
   }
@@ -248,6 +282,29 @@ export default function SeoKeywordsPage() {
 
         <div className="grid gap-6 xl:grid-cols-[1fr_420px]">
           <section className="space-y-5">
+            <div className="rounded-[1.4rem] border border-blue-200/80 bg-blue-50/55 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.04)]">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">AI 生成关键词建议</h2>
+                  <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
+                    根据当前类目、语言、规则模板和你补充的商品方向，自动生成一组可编辑关键词。它借鉴的是 SEOToolSuite 的“关键词研究/建议”思路，但先不接付费数据源。
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <button onClick={() => suggestKeywords('replace')} disabled={suggesting || !categoryId} className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700 disabled:bg-slate-300">
+                    {suggesting ? '生成中...' : 'AI 生成并覆盖'}
+                  </button>
+                  <button onClick={() => suggestKeywords('append')} disabled={suggesting || !categoryId} className="rounded-2xl border border-blue-200 bg-white px-5 py-3 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-50 disabled:text-slate-300">
+                    追加建议
+                  </button>
+                </div>
+              </div>
+              <textarea value={seedText} onChange={(event) => setSeedText(event.target.value)} rows={3} className="mt-4 w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" placeholder="可选：写一些该类目的商品例子、目标市场、你想主推的搜索词。例如：eye cream for dark circles, hydrating, anti-aging wording should be conservative." />
+              <p className="mt-2 text-xs leading-5 text-blue-700">
+                注意：AI 生成后只是填到当前页面，还没有保存。你确认关键词合理后，需要点击上方“保存关键词库”。
+              </p>
+            </div>
+
             <div className="rounded-[1.4rem] border border-slate-200/80 bg-white/88 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.05)]">
               <h2 className="text-lg font-semibold text-slate-950">新增关键词</h2>
               <div className="mt-4 grid gap-3 md:grid-cols-[1fr_170px_120px]">
