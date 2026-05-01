@@ -103,13 +103,13 @@ export default function CategoryPromptPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(250,204,21,0.14),transparent_30%),radial-gradient(circle_at_88%_8%,rgba(37,99,235,0.12),transparent_34%),linear-gradient(180deg,#ffffff_0%,#f8fafc_46%,#eef2f7_100%)]">
       <Navbar />
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-        <Link href="/categories" className="mb-4 inline-block text-sm font-medium text-blue-600">返回类目列表</Link>
-        <div className="mb-5 border-b border-slate-200 pb-5">
+      <main className="mx-auto max-w-[1500px] px-5 py-10 sm:px-8">
+        <Link href="/categories" className="mb-5 inline-flex rounded-2xl border border-slate-200 bg-white/85 px-4 py-2 text-sm font-semibold text-blue-600 shadow-sm hover:bg-white">返回类目列表</Link>
+        <div className="mb-6 border-b border-slate-200 pb-6">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Category prompts</p>
-          <h1 className="mt-1 text-2xl font-semibold text-slate-950">{category ? `${category.icon} ${category.name_zh}` : '类目指令'}</h1>
+          <h1 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">{category ? `${category.icon} ${category.name_zh}` : '类目指令'}</h1>
           <p className="mt-2 text-sm text-slate-500">商品生成时会按顺序调用这里的指令。前 6 条建议对应主图、场景图、详情图。</p>
         </div>
 
@@ -117,7 +117,7 @@ export default function CategoryPromptPage() {
 
         <section className="space-y-3">
           {(category?.prompts || []).map((prompt) => (
-            <article key={prompt.id} className="border border-slate-200 bg-white p-4 shadow-sm">
+            <article key={prompt.id} className="rounded-[1.4rem] border border-slate-200/80 bg-white/90 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <span className="rounded bg-slate-950 px-2 py-1 text-xs font-semibold text-white">P{prompt.prompt_number}</span>
@@ -149,7 +149,7 @@ export default function CategoryPromptPage() {
           ))}
         </section>
 
-        <section className="mt-5 border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="mt-5 rounded-[1.4rem] border border-slate-200/80 bg-white/90 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur">
           <h2 className="text-sm font-semibold text-slate-900">新增指令</h2>
           <div className="mt-3 space-y-3">
             <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">

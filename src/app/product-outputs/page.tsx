@@ -60,16 +60,16 @@ export default function ProductOutputsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_48%,#f1f5f9_100%)]">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(250,204,21,0.16),transparent_30%),radial-gradient(circle_at_88%_8%,rgba(37,99,235,0.12),transparent_34%),linear-gradient(180deg,#ffffff_0%,#f8fafc_46%,#eef2f7_100%)]">
       <Navbar />
-      <main className="mx-auto max-w-[1600px] px-5 py-8 sm:px-8">
+      <main className="mx-auto max-w-[1600px] px-5 py-10 sm:px-8">
         <div className="mb-7">
           <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Generated listings</p>
           <h1 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">商品副本输出</h1>
           <p className="mt-4 max-w-3xl text-base leading-7 text-slate-600">按 SKU、类目、语言和生成时间筛选。每个副本包含标题、描述和 6 张图片任务。</p>
         </div>
 
-        <section className="mb-6 grid gap-4 rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-sm lg:grid-cols-[1fr_1fr_1fr_1fr_auto] lg:items-end">
+        <section className="mb-6 grid gap-4 rounded-[1.4rem] border border-slate-200/80 bg-white/88 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur lg:grid-cols-[1fr_1fr_1fr_1fr_auto] lg:items-end">
           <label className="block">
             <span className="mb-2 block text-xs font-semibold text-slate-500">SKU</span>
             <input value={sku} onChange={(e) => setSku(e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder="请输入 SKU" />
@@ -100,7 +100,7 @@ export default function ProductOutputsPage() {
         {error && <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700 shadow-sm">{error}</div>}
 
         {copies.length === 0 ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-20 text-center shadow-sm">
+          <div className="rounded-[1.4rem] border border-slate-200/80 bg-white/88 p-20 text-center shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur">
             <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-slate-50 text-4xl">📄</div>
             <h2 className="text-xl font-semibold text-slate-950">暂无商品副本输出。</h2>
             <p className="mt-2 text-sm text-slate-500">回到商品工作台，选择商品并开始生成。</p>
@@ -112,7 +112,7 @@ export default function ProductOutputsPage() {
               const category = product?.categories
               const completedImages = (copy.product_copy_images || []).filter((image) => image.status === 'completed').length
               return (
-                <Link key={copy.id} href={`/product-outputs/${copy.id}`} className="block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-xl hover:shadow-slate-200/70">
+                <Link key={copy.id} href={`/product-outputs/${copy.id}`} className="block rounded-[1.4rem] border border-slate-200/80 bg-white/88 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur transition-all hover:-translate-y-1 hover:border-blue-300 hover:shadow-xl hover:shadow-slate-200/70">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="font-mono text-xl font-semibold text-slate-950">{copy.sku}</div>

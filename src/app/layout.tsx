@@ -14,8 +14,8 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Nano Banana 生图系统",
-  description: "AI Image Generation Platform",
+  title: "Nano Listing AI",
+  description: "E-commerce AIGC listing content generation platform",
 };
 
 export default function RootLayout({
@@ -26,7 +26,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-50 text-gray-900`}
+        className={`${geistSans.variable} ${geistMono.variable} bg-gray-50 text-gray-900 antialiased`}
       >
         {children}
       </body>

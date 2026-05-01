@@ -200,14 +200,18 @@ export default function SettingsPage() {
   const providerDisplayName = currentProvider === 'openai' ? 'OpenAI GPT Image 2' : 'Nano Banana / Gemini 2.5 Flash Image'
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(250,204,21,0.14),transparent_30%),radial-gradient(circle_at_88%_8%,rgba(37,99,235,0.12),transparent_34%),linear-gradient(180deg,#ffffff_0%,#f8fafc_46%,#eef2f7_100%)]">
       <Navbar />
 
-      <main className="mx-auto max-w-3xl px-4 py-6 sm:px-6 lg:px-8">
-        <h2 className="mb-6 text-xl font-semibold text-gray-900">系统设置</h2>
+      <main className="mx-auto max-w-4xl px-5 py-10 sm:px-8">
+        <div className="mb-7">
+          <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">System controls</p>
+          <h2 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">系统设置</h2>
+          <p className="mt-3 text-base text-slate-600">配置生成模型、API 权限和账号状态。</p>
+        </div>
 
         <div className="space-y-6">
-          <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="rounded-[1.4rem] border border-slate-200/80 bg-white/88 p-6 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur">
             <h3 className="mb-3 text-base font-semibold text-gray-900">API 权限</h3>
 
             {isAdmin && (
@@ -302,11 +306,11 @@ export default function SettingsPage() {
           </div>
 
           {!staffLocked && (
-            <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="rounded-[1.4rem] border border-slate-200/80 bg-white/88 p-6 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur">
               <h3 className="mb-4 text-base font-semibold text-gray-900">图片模型</h3>
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className={`cursor-pointer rounded-md border p-4 transition-colors ${
-                  currentProvider === 'gemini' ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'
+                <label className={`cursor-pointer rounded-2xl border p-5 transition-all ${
+                  currentProvider === 'gemini' ? 'border-blue-300 bg-blue-50 shadow-sm ring-1 ring-blue-100' : 'border-gray-200 bg-white hover:-translate-y-0.5 hover:bg-gray-50'
                 }`}>
                   <div className="flex items-center gap-2">
                     <input
@@ -323,8 +327,8 @@ export default function SettingsPage() {
                   </p>
                 </label>
 
-                <label className={`cursor-pointer rounded-md border p-4 transition-colors ${
-                  currentProvider === 'openai' ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'
+                <label className={`cursor-pointer rounded-2xl border p-5 transition-all ${
+                  currentProvider === 'openai' ? 'border-blue-300 bg-blue-50 shadow-sm ring-1 ring-blue-100' : 'border-gray-200 bg-white hover:-translate-y-0.5 hover:bg-gray-50'
                 }`}>
                   <div className="flex items-center gap-2">
                     <input
@@ -344,7 +348,7 @@ export default function SettingsPage() {
             </div>
           )}
 
-          <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="rounded-[1.4rem] border border-slate-200/80 bg-white/88 p-6 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur">
             <h3 className="mb-4 text-base font-semibold text-gray-900">生成模式</h3>
 
             {staffLocked && (
@@ -354,8 +358,8 @@ export default function SettingsPage() {
             )}
 
             <div className={`grid gap-3 ${staffLocked ? 'sm:grid-cols-1' : 'sm:grid-cols-2'}`}>
-              <label className={`cursor-pointer rounded-md border p-4 transition-colors ${
-                currentMode === 'batch' ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'
+              <label className={`cursor-pointer rounded-2xl border p-5 transition-all ${
+                currentMode === 'batch' ? 'border-blue-300 bg-blue-50 shadow-sm ring-1 ring-blue-100' : 'border-gray-200 bg-white hover:-translate-y-0.5 hover:bg-gray-50'
               }`}>
                 <div className="flex items-center gap-2">
                   <input
@@ -374,8 +378,8 @@ export default function SettingsPage() {
               </label>
 
               {!staffLocked && (
-                <label className={`cursor-pointer rounded-md border p-4 transition-colors ${
-                  currentMode === 'direct' ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white hover:bg-gray-50'
+                <label className={`cursor-pointer rounded-2xl border p-5 transition-all ${
+                  currentMode === 'direct' ? 'border-blue-300 bg-blue-50 shadow-sm ring-1 ring-blue-100' : 'border-gray-200 bg-white hover:-translate-y-0.5 hover:bg-gray-50'
                 }`}>
                   <div className="flex items-center gap-2">
                     <input
@@ -396,7 +400,7 @@ export default function SettingsPage() {
             <p className="mt-3 text-xs text-gray-400">当前模型：{providerDisplayName}</p>
           </div>
 
-          <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="rounded-[1.4rem] border border-slate-200/80 bg-white/88 p-6 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur">
             <h3 className="mb-4 text-base font-semibold text-gray-900">账户信息</h3>
             <dl className="space-y-3">
               <div>

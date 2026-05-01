@@ -138,8 +138,16 @@ export async function PUT(request: NextRequest) {
     updateData.gemini_api_key_encrypted = encodeStoredGeminiSettings({
       apiKey: gemini_api_key !== undefined ? (String(gemini_api_key).trim() || null) : currentStored.apiKey,
       openaiApiKey: openai_api_key !== undefined ? (String(openai_api_key).trim() || null) : currentStored.openaiApiKey,
-      generationMode: lockedToStaffBatch ? 'batch' : (generation_mode === 'direct' ? 'direct' : 'batch'),
-      imageProvider: lockedToStaffBatch ? 'gemini' : (image_provider === 'openai' ? 'openai' : currentStored.imageProvider),
+      generationMode: lockedToStaffBatch
+        ? 'batch'
+        : generation_mode !== undefined
+          ? (generation_mode === 'direct' ? 'direct' : 'batch')
+          : currentStored.generationMode,
+      imageProvider: lockedToStaffBatch
+        ? 'gemini'
+        : image_provider !== undefined
+          ? (image_provider === 'openai' ? 'openai' : 'gemini')
+          : currentStored.imageProvider,
     })
   }
   if (use_builtin_key !== undefined) {

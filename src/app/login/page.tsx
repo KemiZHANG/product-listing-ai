@@ -85,8 +85,8 @@ export default function LoginPage() {
         <div className="rounded-[2rem] border border-white/80 bg-white/88 p-10 shadow-2xl shadow-slate-300/50 backdrop-blur-xl">
           <div className="mb-8 text-center">
             <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-amber-100 to-yellow-50 text-5xl shadow-sm ring-1 ring-amber-200/70">🍌</div>
-            <h1 className="text-4xl font-semibold tracking-tight text-slate-950">Nano Banana 生图系统</h1>
-            <p className="mt-3 text-lg text-slate-500">AI Image Generation Platform</p>
+            <h1 className="text-4xl font-semibold tracking-tight text-slate-950">Nano Listing AI</h1>
+            <p className="mt-3 text-lg text-slate-500">电商 AIGC 商品素材生成平台</p>
             <p className="mt-5 inline-flex items-center rounded-full bg-slate-50 px-4 py-2 text-sm font-medium text-slate-500 ring-1 ring-slate-200">
               当前仅开放指定账号使用。
             </p>

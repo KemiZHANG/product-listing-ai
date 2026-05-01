@@ -68,7 +68,6 @@ export default function ProductDashboardPage() {
   const [newColumnName, setNewColumnName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
-  const [upgradingPrompts, setUpgradingPrompts] = useState(false)
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
   const importInputRef = useRef<HTMLInputElement>(null)
@@ -349,22 +348,6 @@ export default function ProductDashboardPage() {
     }
   }
 
-  const handleUpgradePrompts = async () => {
-    if (!window.confirm('这会把现有类目 prompts 迁移成 6 条：主图2条、场景2条、详情2条。确定继续吗？')) return
-    setUpgradingPrompts(true)
-    setError(null)
-    try {
-      const res = await apiFetch('/api/categories/upgrade-prompts', { method: 'POST' })
-      const data = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(data?.error || '升级类目指令失败')
-      await fetchAll()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '升级类目指令失败')
-    } finally {
-      setUpgradingPrompts(false)
-    }
-  }
-
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">
@@ -374,40 +357,36 @@ export default function ProductDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(254,243,199,0.45),transparent_34%),linear-gradient(180deg,#ffffff_0%,#f8fafc_42%,#f1f5f9_100%)] text-slate-950">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(250,204,21,0.22),transparent_30%),radial-gradient(circle_at_88%_8%,rgba(37,99,235,0.14),transparent_34%),linear-gradient(180deg,#ffffff_0%,#f8fafc_42%,#eef2f7_100%)] text-slate-950">
       <Navbar />
-      <main className="mx-auto max-w-[1600px] px-5 py-8 sm:px-8">
+      <main className="mx-auto max-w-[1600px] px-5 py-10 sm:px-8">
         <section className="mb-7">
           <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Product workflow</p>
-              <h1 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">商品素材生成工作台</h1>
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Listing content studio</p>
+                <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 shadow-sm shadow-blue-100/70">2 主图 + 2 场景 + 2 详情图</span>
+              </div>
+              <h1 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">电商素材生成工作台</h1>
               <p className="mt-4 max-w-3xl text-base leading-7 text-slate-600">
-                每一行是一个商品。选择类目后会调用该类目的 6 条图片指令，并按 SKU、语言、副本序号生成商品图、标题和描述。
+                统一管理 SKU、参考图、标题、描述、类目和多语言副本，一次生成商品图、标题与描述。
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
-              <button
-                onClick={handleUpgradePrompts}
-                disabled={upgradingPrompts}
-                className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-400 hover:bg-slate-50 disabled:opacity-50"
-              >
-                {upgradingPrompts ? '升级中...' : '升级类目 6 指令'}
-              </button>
-              <button onClick={openCreate} className="rounded-xl bg-slate-950 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-950/15 hover:bg-slate-800">
+              <button onClick={openCreate} className="rounded-2xl bg-[linear-gradient(135deg,#071228,#0f172a)] px-6 py-3 text-sm font-semibold text-white shadow-xl shadow-slate-950/18 transition-transform hover:-translate-y-0.5 hover:bg-slate-800">
                 新增商品
               </button>
               <button
                 onClick={() => importInputRef.current?.click()}
                 disabled={importing}
-                className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-400 hover:bg-slate-50 disabled:opacity-50"
+                className="rounded-2xl border border-slate-300 bg-white/90 px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm transition-transform hover:-translate-y-0.5 hover:border-slate-400 hover:bg-white disabled:opacity-50"
               >
                 {importing ? '导入中...' : '导入 Excel/CSV'}
               </button>
               <button
                 onClick={handleGenerate}
                 disabled={selected.size === 0 || generating}
-                className="rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                className="rounded-2xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-xl shadow-emerald-500/20 transition-transform hover:-translate-y-0.5 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
               >
                 {generating ? '创建中...' : `生成已选商品 (${selected.size})`}
               </button>
@@ -423,7 +402,7 @@ export default function ProductDashboardPage() {
                     ? stats.copyTarget
                     : columns.length
               return (
-                <div key={card.key} className={`rounded-2xl border border-slate-200 bg-white/90 p-6 shadow-sm ring-1 ring-white/70 ${card.tone.split(' ')[0]}`}>
+                <div key={card.key} className={`rounded-[1.4rem] border border-slate-200/80 bg-white/82 p-6 shadow-[0_18px_55px_rgba(15,23,42,0.06)] ring-1 ring-white/70 backdrop-blur transition-transform hover:-translate-y-0.5 ${card.tone.split(' ')[0]}`}>
                   <div className="flex items-center gap-5">
                     <span className={`flex h-14 w-14 items-center justify-center rounded-full text-2xl ${card.tone.replace(card.tone.split(' ')[0], '')}`}>
                       {card.icon}

@@ -25,7 +25,6 @@ export default function CategoriesPage() {
   const [icon, setIcon] = useState('📦')
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
-  const [upgrading, setUpgrading] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -81,46 +80,25 @@ export default function CategoriesPage() {
     await fetchCategories()
   }
 
-  const upgradePrompts = async () => {
-    if (!window.confirm('确定把所有类目升级为 6 条指令结构吗？这会重写当前类目指令。')) return
-    setUpgrading(true)
-    setError(null)
-    const res = await apiFetch('/api/categories/upgrade-prompts', { method: 'POST' })
-    const data = await res.json().catch(() => null)
-    setUpgrading(false)
-    if (!res.ok) {
-      setError(data?.error || '升级类目指令失败')
-      return
-    }
-    await fetchCategories()
-  }
-
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">Loading...</div>
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_48%,#f1f5f9_100%)]">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(250,204,21,0.18),transparent_30%),radial-gradient(circle_at_88%_8%,rgba(37,99,235,0.12),transparent_34%),linear-gradient(180deg,#ffffff_0%,#f8fafc_46%,#eef2f7_100%)]">
       <Navbar />
-      <main className="mx-auto max-w-[1600px] px-5 py-8 sm:px-8">
+      <main className="mx-auto max-w-[1600px] px-5 py-10 sm:px-8">
         <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Category prompts</p>
             <h1 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">类目管理</h1>
             <p className="mt-4 max-w-3xl text-base leading-7 text-slate-600">每个类目只存放对应的图片生成指令，商品在工作台中选择类目后自动调用这些指令。</p>
           </div>
-          <button
-            onClick={upgradePrompts}
-            disabled={upgrading}
-            className="w-fit rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
-          >
-            {upgrading ? '升级中...' : '升级类目 6 指令'}
-          </button>
         </div>
 
         {error && <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700 shadow-sm">{error}</div>}
 
-        <form onSubmit={createCategory} className="mb-7 grid gap-3 rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-sm md:grid-cols-[110px_1fr_1fr_auto]">
+        <form onSubmit={createCategory} className="mb-7 grid gap-3 rounded-[1.4rem] border border-slate-200/80 bg-white/88 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur md:grid-cols-[110px_1fr_1fr_auto]">
           <input value={icon} onChange={(e) => setIcon(e.target.value)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder="图标" />
           <input required value={name} onChange={(e) => setName(e.target.value)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder="类目名称" />
           <input value={slug} onChange={(e) => setSlug(e.target.value)} className="rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder="slug，可自动生成" />
@@ -131,7 +109,7 @@ export default function CategoriesPage() {
 
         <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
           {categories.map((category) => (
-            <article key={category.id} className="group overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-xl hover:shadow-slate-200/70">
+            <article key={category.id} className="group overflow-hidden rounded-[1.4rem] border border-slate-200/80 bg-white/88 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur transition-all hover:-translate-y-1 hover:border-blue-300 hover:shadow-xl hover:shadow-slate-200/70">
               <div className="p-6">
                 <Link href={`/categories/${category.id}`} className="min-w-0">
                   <div className="flex flex-col gap-4">

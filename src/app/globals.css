@@ -5,13 +5,48 @@
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;
+  --brand-ink: #071228;
+  --brand-blue: #2563eb;
+  --brand-gold: #f5b90a;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+::selection {
+  background: rgba(245, 185, 10, 0.28);
+  color: var(--brand-ink);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+  border: 3px solid transparent;
+  background-clip: padding-box;
 }
 
 @layer utilities {

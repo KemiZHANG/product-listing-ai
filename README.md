@@ -1,6 +1,6 @@
-# Nano Banana Web 电商 AIGC 商品素材生成系统
+# Nano Listing AI 电商 AIGC 商品素材生成系统
 
-An AI-powered ecommerce listing asset generation platform built with Next.js, Supabase, Gemini, Nano Banana image generation workflow, and Vercel.
+An AI-powered ecommerce listing content generation platform built with Next.js, Supabase, Gemini / Nano Banana image generation workflow, and Vercel.
 
 一个面向 Shopee/TikTok 等跨境电商上品场景的 AIGC Web 系统，用于管理商品资料、类目 Prompt、平台规则、多语言副本，并批量生成商品图、标题和描述。
 
@@ -14,9 +14,9 @@ https://nano-banana-web-zeta.vercel.app
 
 ## Project Overview / 项目概览
 
-Nano Banana Web turns the ecommerce listing workflow into a structured generation pipeline. Users can maintain a product master table with SKU, original title, description, category, selling points, custom attributes, and reference images. The system then generates language-specific listing copies and image tasks based on category prompts and editable compliance rules.
+Nano Listing AI turns the ecommerce listing workflow into a structured generation pipeline. Users can maintain a product master table with SKU, original title, description, category, selling points, custom attributes, and reference images. The system then generates language-specific listing copies and image tasks based on category prompts and editable compliance rules.
 
-Nano Banana Web 将电商上品流程拆解为结构化 AIGC 工作流：用户维护商品总表，录入 SKU、原标题、原描述、类目、卖点、自定义属性和多张参考图；系统根据类目 Prompt 与可编辑平台规则，自动生成不同语言/副本的商品标题、描述和 6 张商品图任务。
+Nano Listing AI 将电商上品流程拆解为结构化 AIGC 工作流：用户维护商品总表，录入 SKU、原标题、原描述、类目、卖点、自定义属性和多张参考图；系统根据类目 Prompt 与可编辑平台规则，自动生成不同语言/副本的商品标题、描述和 6 张商品图任务。
 
 ## Core Features / 核心功能
 
@@ -141,4 +141,3 @@ BUILTIN_GEMINI_API_KEY=<optional-gemini-api-key>
 ```
 
 After changing environment variables or database schema, redeploy the project on Vercel.
-

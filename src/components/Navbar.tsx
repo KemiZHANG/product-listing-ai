@@ -46,14 +46,16 @@ export default function Navbar() {
   }
 
   return (
-    <nav className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 shadow-[0_1px_0_rgba(15,23,42,0.03)] backdrop-blur-xl">
-      <div className="mx-auto flex h-[72px] max-w-[1600px] items-center justify-between px-5 sm:px-8">
+    <nav className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/82 shadow-[0_18px_70px_rgba(15,23,42,0.06)] backdrop-blur-2xl">
+      <div className="mx-auto flex h-[76px] max-w-[1600px] items-center justify-between px-5 sm:px-8">
         <div className="flex min-w-0 items-center gap-9">
-          <Link href="/" className="flex shrink-0 items-center gap-3 text-xl font-semibold text-slate-950">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-100 to-yellow-50 text-2xl shadow-sm ring-1 ring-amber-200/60">
+          <Link href="/" className="group flex shrink-0 items-center gap-3 text-xl font-semibold text-slate-950">
+            <span className="flex h-12 w-12 items-center justify-center rounded-[1.25rem] bg-gradient-to-br from-amber-100 via-yellow-50 to-white text-2xl shadow-[0_12px_30px_rgba(245,158,11,0.18)] ring-1 ring-amber-200/70 transition-transform group-hover:-rotate-3 group-hover:scale-105">
               🍌
             </span>
-            <span className="tracking-tight">Nano Banana</span>
+            <span className="tracking-tight">
+              Nano Listing <span className="text-blue-600">AI</span>
+            </span>
           </Link>
 
           <div className="hidden items-center gap-2 lg:flex">
@@ -66,15 +68,15 @@ export default function Navbar() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`relative rounded-xl px-4 py-2 text-sm font-medium transition-all ${
+                  className={`relative rounded-2xl px-4 py-2.5 text-sm font-semibold transition-all ${
                     isActive
-                      ? 'bg-slate-100 text-slate-950 shadow-sm'
-                      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-950'
+                      ? 'bg-slate-950 text-white shadow-lg shadow-slate-950/15'
+                      : 'text-slate-500 hover:bg-slate-100/80 hover:text-slate-950'
                   }`}
                 >
                   {link.label}
                   {isActive && (
-                    <span className="absolute -bottom-[18px] left-4 right-4 h-1 rounded-full bg-slate-950" />
+                    <span className="absolute -bottom-[18px] left-5 right-5 h-1 rounded-full bg-blue-500" />
                   )}
                 </Link>
               )
@@ -84,20 +86,20 @@ export default function Navbar() {
 
         <div className="flex shrink-0 items-center gap-3">
           {userEmail && (
-            <span className="hidden max-w-[260px] truncate rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 shadow-sm xl:inline">
+            <span className="hidden max-w-[260px] truncate rounded-2xl border border-slate-200 bg-white/80 px-3 py-2 text-sm font-medium text-slate-600 shadow-sm xl:inline">
               {userEmail}
             </span>
           )}
           <button
             onClick={handleLogout}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950"
+            className="rounded-2xl border border-slate-200 bg-white/85 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-white hover:text-slate-950"
           >
             Logout
           </button>
         </div>
       </div>
 
-      <div className="flex gap-1 overflow-x-auto border-t border-slate-100 px-4 py-2 lg:hidden">
+      <div className="flex gap-1 overflow-x-auto border-t border-slate-100 bg-white/75 px-4 py-2 lg:hidden">
         {visibleLinks.map((link) => {
           const isActive =
             link.href === '/'
@@ -107,9 +109,9 @@ export default function Navbar() {
             <Link
               key={link.href}
               href={link.href}
-              className={`shrink-0 rounded-md px-3 py-1 text-sm font-medium transition-colors ${
+              className={`shrink-0 rounded-xl px-3 py-1.5 text-sm font-semibold transition-colors ${
                 isActive
-                  ? 'bg-slate-100 text-slate-950'
+                  ? 'bg-slate-950 text-white'
                   : 'text-slate-500 hover:bg-slate-50'
               }`}
             >

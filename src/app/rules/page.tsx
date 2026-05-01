@@ -91,9 +91,9 @@ export default function RulesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_48%,#f1f5f9_100%)]">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(250,204,21,0.16),transparent_30%),radial-gradient(circle_at_88%_8%,rgba(37,99,235,0.12),transparent_34%),linear-gradient(180deg,#ffffff_0%,#f8fafc_46%,#eef2f7_100%)]">
       <Navbar />
-      <main className="mx-auto max-w-[1600px] px-5 py-8 sm:px-8">
+      <main className="mx-auto max-w-[1600px] px-5 py-10 sm:px-8">
         <div className="mb-8">
           <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Editable skills</p>
           <h1 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">规则模板</h1>
@@ -102,7 +102,7 @@ export default function RulesPage() {
         {error && <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700 shadow-sm">{error}</div>}
 
         <div className="grid gap-6 lg:grid-cols-[480px_1fr]">
-          <form onSubmit={saveRule} className="rounded-2xl border border-slate-200 bg-white/95 p-6 shadow-sm">
+          <form onSubmit={saveRule} className="rounded-[1.4rem] border border-slate-200/80 bg-white/88 p-6 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur">
             <h2 className="text-xl font-semibold text-slate-950">{editingId ? '编辑规则' : '新增规则'}</h2>
             <label className="mt-4 block">
               <span className="mb-2 block text-sm font-semibold text-slate-600">名称</span>
@@ -126,7 +126,7 @@ export default function RulesPage() {
               启用
             </label>
             <div className="mt-4 flex gap-2">
-              <button className="rounded-xl bg-slate-950 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-950/15 hover:bg-slate-800">
+              <button className="rounded-2xl bg-[linear-gradient(135deg,#071228,#0f172a)] px-6 py-3 text-sm font-semibold text-white shadow-xl shadow-slate-950/18 hover:bg-slate-800">
                 保存规则
               </button>
               {editingId && (
@@ -137,7 +137,7 @@ export default function RulesPage() {
             </div>
           </form>
 
-          <section className="rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-sm">
+          <section className="rounded-[1.4rem] border border-slate-200/80 bg-white/88 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur">
             <div className="mb-4 flex items-center gap-3">
               <h2 className="text-xl font-semibold text-slate-950">规则列表</h2>
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">{rules.length} 条规则</span>
@@ -146,7 +146,7 @@ export default function RulesPage() {
             {rules.length === 0 ? (
               <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500">暂无规则。</div>
             ) : rules.map((rule) => (
-              <article key={rule.id} className={`rounded-2xl border bg-white p-4 shadow-sm transition-all hover:border-blue-300 ${editingId === rule.id ? 'border-blue-400 ring-2 ring-blue-100' : 'border-slate-200'}`}>
+              <article key={rule.id} className={`rounded-2xl border bg-white/92 p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-300 ${editingId === rule.id ? 'border-blue-400 ring-2 ring-blue-100' : 'border-slate-200'}`}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
