@@ -78,6 +78,16 @@ export async function POST(request: NextRequest) {
     .order('prompt_number', { ascending: true })
     .limit(3)
 
+  const { data: rules } = await supabase
+    .from('rule_templates')
+    .select('name, scope, content')
+    .eq('user_id', user.id)
+    .eq('active', true)
+
+  const ruleText = (rules || [])
+    .map((rule) => `【${rule.name} / ${rule.scope}】\n${rule.content}`)
+    .join('\n\n')
+
   const userPrompt = buildPromptGeneratorUserPrompt({
     categoryName: category.name_zh,
     categorySlug: category.slug,
@@ -85,7 +95,10 @@ export async function POST(request: NextRequest) {
     imageStyle: String(image_style || '').trim(),
     peopleMode: String(people_mode || '').trim(),
     displayMethod: String(display_method || '').trim(),
-    extraInfo: String(extra_info || '').trim(),
+    extraInfo: [
+      String(extra_info || '').trim(),
+      ruleText ? `请遵守以下网站规则模板和图片输出限制：\n${ruleText}` : '',
+    ].filter(Boolean).join('\n\n'),
     existingPrompts: prompts?.map((prompt) => prompt.prompt_text) || [],
   })
 

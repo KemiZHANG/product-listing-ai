@@ -155,14 +155,18 @@ export default function OutputsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(250,204,21,0.14),transparent_30%),radial-gradient(circle_at_88%_8%,rgba(37,99,235,0.12),transparent_34%),linear-gradient(180deg,#ffffff_0%,#f8fafc_46%,#eef2f7_100%)]">
       <Navbar />
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <h2 className="mb-6 text-xl font-semibold text-gray-900">输出图库</h2>
+      <main className="mx-auto max-w-[1600px] px-5 py-10 sm:px-8">
+        <div className="mb-7">
+          <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Standalone image outputs</p>
+          <h2 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">单纯图片输出</h2>
+          <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">这里展示从类目页批量运行的图片结果。它读取类目参考图和类目指令，不读取商品表里的 SKU 原图。</p>
+        </div>
 
         {/* Filter bar */}
-        <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="mb-6 rounded-[1.4rem] border border-slate-200/80 bg-white/88 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur">
           <div className="flex flex-wrap items-end gap-4">
             {/* Category */}
             <div>
@@ -201,12 +205,11 @@ export default function OutputsPage() {
                 className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 <option value="">全部</option>
-                {[1, 2, 3, 4, 5].map((n) => (
+                {[1, 2, 3, 4, 5, 6].map((n) => (
                   <option key={n} value={n}>
                     P{n}
                   </option>
                 ))}
-                <option value="6">P6+</option>
               </select>
             </div>
 
@@ -250,7 +253,7 @@ export default function OutputsPage() {
 
         {/* Output grid */}
         {outputs.length === 0 ? (
-          <div className="rounded-lg bg-white p-12 text-center shadow-sm">
+          <div className="rounded-[1.4rem] bg-white/88 p-12 text-center shadow-sm">
             <p className="text-gray-500">暂无输出图片。</p>
           </div>
         ) : (
@@ -258,7 +261,7 @@ export default function OutputsPage() {
             {outputs.map((output) => (
               <div
                 key={output.id}
-                className="group relative overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md"
+                className="group relative overflow-hidden rounded-[1.4rem] border border-slate-200/80 bg-white/90 shadow-[0_18px_55px_rgba(15,23,42,0.05)] transition-all hover:-translate-y-1 hover:shadow-xl"
               >
                 {/* Image preview */}
                 <button
