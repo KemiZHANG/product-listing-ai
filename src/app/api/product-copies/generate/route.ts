@@ -4,6 +4,7 @@ import { isAdminEmail } from '@/lib/admin'
 import { isBuiltinKeyEmailAuthorized } from '@/lib/builtin-key-access'
 import { buildProductImagePrompt, buildTitleDescriptionPrompt, defaultDetailPrompt, getLanguageLabel } from '@/lib/product-generation'
 import { parseStoredGeminiSettings, readBuiltinGeminiApiKey } from '@/lib/gemini-settings'
+import { COPY_PLAN_ATTRIBUTE_KEY, PRODUCT_LANGUAGES } from '@/lib/types'
 
 const ROLE_ORDER = ['main_1', 'main_2', 'model_scene_1', 'model_scene_2', 'detail_1', 'detail_2']
 
@@ -13,6 +14,45 @@ function promptRole(number: number) {
 
 function copyIndexes(count: number) {
   return Array.from({ length: Math.max(1, Math.min(count || 1, 20)) }, (_, index) => index + 1)
+}
+
+function parseLanguageCopyPlan(product: {
+  copy_count?: number | null
+  languages?: string[] | null
+  attributes?: Record<string, unknown> | null
+}) {
+  const allowedCodes = new Set(PRODUCT_LANGUAGES.map((language) => language.code))
+  const rawPlan = product.attributes?.[COPY_PLAN_ATTRIBUTE_KEY]
+  let parsed: Record<string, unknown> | null = null
+
+  if (typeof rawPlan === 'string') {
+    try {
+      parsed = JSON.parse(rawPlan)
+    } catch {
+      parsed = null
+    }
+  } else if (rawPlan && typeof rawPlan === 'object' && !Array.isArray(rawPlan)) {
+    parsed = rawPlan as Record<string, unknown>
+  }
+
+  if (parsed) {
+    const plan = PRODUCT_LANGUAGES
+      .map((language) => ({
+        languageCode: language.code,
+        count: Math.min(Math.max(Math.floor(Number(parsed?.[language.code] || 0)), 0), 20),
+      }))
+      .filter((item) => item.count > 0)
+
+    if (plan.length > 0) return plan
+  }
+
+  const fallbackLanguages = Array.isArray(product.languages)
+    ? product.languages.filter((code) => allowedCodes.has(code))
+    : []
+  const languages = fallbackLanguages.length > 0 ? fallbackLanguages : ['en']
+  const count = Math.max(1, Math.min(Number(product.copy_count || 1), 20))
+
+  return languages.map((languageCode) => ({ languageCode, count }))
 }
 
 async function getTextGenerationApiKey(
@@ -147,9 +187,10 @@ export async function POST(request: NextRequest) {
 
     await supabase.from('product_copies').delete().eq('product_id', product.id)
 
-    for (const languageCode of product.languages || ['en']) {
+    const copyPlan = parseLanguageCopyPlan(product)
+    for (const { languageCode, count } of copyPlan) {
       const languageLabel = getLanguageLabel(languageCode)
-      for (const copyIndex of copyIndexes(product.copy_count)) {
+      for (const copyIndex of copyIndexes(count)) {
         const textResult = await generateTitleDescription(textApiKey, buildTitleDescriptionPrompt({
           sku: product.sku,
           sourceTitle: product.source_title,

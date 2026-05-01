@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import { apiFetch } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
-import { PRODUCT_LANGUAGES } from '@/lib/types'
+import { COPY_PLAN_ATTRIBUTE_KEY, PRODUCT_LANGUAGES } from '@/lib/types'
 import type { Category, Product, ProductAttributeColumn } from '@/lib/types'
 
 type ProductForm = {
@@ -15,10 +15,13 @@ type ProductForm = {
   source_title: string
   source_description: string
   selling_points: string
-  copy_count: number
-  languages: string[]
+  languageCopyCounts: Record<string, number>
   attributes: Record<string, string>
 }
+
+const defaultLanguageCopyCounts = Object.fromEntries(
+  PRODUCT_LANGUAGES.map((language) => [language.code, language.code === 'en' ? 1 : 0])
+)
 
 const emptyForm: ProductForm = {
   sku: '',
@@ -26,9 +29,49 @@ const emptyForm: ProductForm = {
   source_title: '',
   source_description: '',
   selling_points: '',
-  copy_count: 1,
-  languages: ['en'],
+  languageCopyCounts: defaultLanguageCopyCounts,
   attributes: {},
+}
+
+function parseLanguageCopyCounts(product?: Product | null) {
+  const fallback = Object.fromEntries(PRODUCT_LANGUAGES.map((language) => [
+    language.code,
+    product?.languages?.includes(language.code) ? Math.max(1, Number(product.copy_count || 1)) : 0,
+  ]))
+
+  const rawPlan = product?.attributes?.[COPY_PLAN_ATTRIBUTE_KEY]
+  if (typeof rawPlan === 'string') {
+    try {
+      const parsed = JSON.parse(rawPlan) as Record<string, unknown>
+      const counts = Object.fromEntries(PRODUCT_LANGUAGES.map((language) => [
+        language.code,
+        Math.min(Math.max(Math.floor(Number(parsed[language.code] || 0)), 0), 20),
+      ]))
+      return Object.values(counts).some((count) => count > 0) ? counts : fallback
+    } catch {
+      return fallback
+    }
+  }
+
+  return fallback
+}
+
+function publicAttributes(attributes?: Record<string, string> | null) {
+  const next = { ...(attributes || {}) }
+  delete next[COPY_PLAN_ATTRIBUTE_KEY]
+  return next
+}
+
+function languageCopyTotal(product: Product) {
+  const counts = parseLanguageCopyCounts(product)
+  return Object.values(counts).reduce((sum, count) => sum + count, 0)
+}
+
+function languageCopySummary(product: Product) {
+  const counts = parseLanguageCopyCounts(product)
+  return PRODUCT_LANGUAGES
+    .filter((language) => counts[language.code] > 0)
+    .map((language) => `${language.label} ${counts[language.code]}`)
 }
 
 function normalizeForm(product?: Product | null): ProductForm {
@@ -40,9 +83,8 @@ function normalizeForm(product?: Product | null): ProductForm {
     source_title: product.source_title || '',
     source_description: product.source_description || '',
     selling_points: product.selling_points || '',
-    copy_count: product.copy_count || 1,
-    languages: product.languages?.length ? product.languages : ['en'],
-    attributes: product.attributes || {},
+    languageCopyCounts: parseLanguageCopyCounts(product),
+    attributes: publicAttributes(product.attributes),
   }
 }
 
@@ -134,7 +176,7 @@ export default function ProductDashboardPage() {
 
   const stats = useMemo(() => {
     const imageCount = products.reduce((sum, product) => sum + (product.images?.length || 0), 0)
-    const copyTarget = products.reduce((sum, product) => sum + product.copy_count * (product.languages?.length || 1), 0)
+    const copyTarget = products.reduce((sum, product) => sum + languageCopyTotal(product), 0)
     return { imageCount, copyTarget }
   }, [products])
 
@@ -148,7 +190,7 @@ export default function ProductDashboardPage() {
   }
 
   const openCreate = () => {
-    setForm(emptyForm)
+    setForm({ ...emptyForm, languageCopyCounts: { ...defaultLanguageCopyCounts }, attributes: {} })
     setSourceFiles([])
     setFormOpen(true)
   }
@@ -206,10 +248,31 @@ export default function ProductDashboardPage() {
     setSaving(true)
     setError(null)
     try {
+      const languageCopyCounts = Object.fromEntries(PRODUCT_LANGUAGES.map((language) => [
+        language.code,
+        Math.min(Math.max(Math.floor(Number(form.languageCopyCounts[language.code] || 0)), 0), 20),
+      ]))
+      const selectedLanguages = PRODUCT_LANGUAGES
+        .filter((language) => languageCopyCounts[language.code] > 0)
+        .map((language) => language.code)
+      const normalizedLanguages = selectedLanguages.length > 0 ? selectedLanguages : ['en']
+      const normalizedCounts = selectedLanguages.length > 0
+        ? languageCopyCounts
+        : { ...languageCopyCounts, en: 1 }
+      const maxCopyCount = Math.max(...Object.values(normalizedCounts), 1)
       const payload = {
-        ...form,
+        id: form.id,
+        sku: form.sku,
         category_id: form.category_id || null,
-        copy_count: Number(form.copy_count || 1),
+        source_title: form.source_title,
+        source_description: form.source_description,
+        selling_points: form.selling_points,
+        copy_count: maxCopyCount,
+        languages: normalizedLanguages,
+        attributes: {
+          ...form.attributes,
+          [COPY_PLAN_ATTRIBUTE_KEY]: JSON.stringify(normalizedCounts),
+        },
       }
       const res = await apiFetch(form.id ? `/api/products/${form.id}` : '/api/products', {
         method: form.id ? 'PUT' : 'POST',
@@ -323,9 +386,11 @@ export default function ProductDashboardPage() {
     }
   }
 
-  const handleGenerate = async () => {
-    if (selected.size === 0) return
-    const productsWithoutImages = products.filter((product) => selected.has(product.id) && (product.images || []).length === 0)
+  const handleGenerate = async (productIds?: string[]) => {
+    const targetIds = Array.isArray(productIds) ? productIds : Array.from(selected)
+    if (targetIds.length === 0) return
+    const targetIdSet = new Set(targetIds)
+    const productsWithoutImages = products.filter((product) => targetIdSet.has(product.id) && (product.images || []).length === 0)
     if (productsWithoutImages.length > 0) {
       setError(`这些 SKU 还没有上传原始参考图，不能生图：${productsWithoutImages.map((product) => product.sku).join('、')}`)
       return
@@ -336,7 +401,7 @@ export default function ProductDashboardPage() {
       const res = await apiFetch('/api/product-copies/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_ids: Array.from(selected) }),
+        body: JSON.stringify({ product_ids: targetIds }),
       })
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(data?.error || '创建生成任务失败')
@@ -384,11 +449,11 @@ export default function ProductDashboardPage() {
                 {importing ? '导入中...' : '导入 Excel/CSV'}
               </button>
               <button
-                onClick={handleGenerate}
+                onClick={() => handleGenerate()}
                 disabled={selected.size === 0 || generating}
                 className="rounded-2xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-xl shadow-emerald-500/20 transition-transform hover:-translate-y-0.5 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
               >
-                {generating ? '创建中...' : `生成已选商品 (${selected.size})`}
+                {generating ? '创建中...' : `生成/重新生成已选商品 (${selected.size})`}
               </button>
             </div>
           </div>
@@ -518,9 +583,11 @@ export default function ProductDashboardPage() {
                       {product.categories ? `${product.categories.icon} ${product.categories.name_zh}` : <span className="text-red-500">未选择</span>}
                     </td>
                     <td className="px-3 py-3">
-                      <div className="whitespace-nowrap text-slate-700">{product.copy_count} 组</div>
-                      <div className="mt-1 max-w-[180px] text-xs text-slate-500">
-                        {(product.languages || []).map((code) => PRODUCT_LANGUAGES.find((item) => item.code === code)?.label || code).join('、')}
+                      <div className="whitespace-nowrap text-slate-700">{languageCopyTotal(product)} 组</div>
+                      <div className="mt-1 flex max-w-[200px] flex-wrap gap-1 text-xs text-slate-500">
+                        {languageCopySummary(product).map((item) => (
+                          <span key={item} className="rounded-lg bg-slate-100 px-2 py-1">{item}</span>
+                        ))}
                       </div>
                     </td>
                     {columns.map((column) => (
@@ -532,15 +599,30 @@ export default function ProductDashboardPage() {
                       <span className={`rounded-xl px-3 py-1.5 text-xs font-semibold ${
                         (product.images || []).length === 0
                           ? 'bg-red-50 text-red-600 ring-1 ring-red-200'
-                          : product.status === 'completed'
+                          : product.copy_count_generated
                             ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                            : product.status === 'completed'
+                              ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                              : product.status === 'queued' || product.status === 'generating'
+                                ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200'
                             : 'bg-slate-100 text-slate-600'
                       }`}>
-                        {(product.images || []).length === 0 ? '缺少原图' : product.status}
+                        {(product.images || []).length === 0
+                          ? '缺少原图'
+                          : product.copy_count_generated
+                            ? `已生成 ${product.copy_count_generated} 个，可重生成`
+                            : product.status}
                       </span>
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex gap-2">
+                        <button
+                          onClick={() => handleGenerate([product.id])}
+                          disabled={generating || (product.images || []).length === 0}
+                          className="rounded-lg px-2 py-1 text-sm font-semibold text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800 disabled:text-slate-300"
+                        >
+                          {product.copy_count_generated ? '重新生成' : '生成'}
+                        </button>
                         <button onClick={() => openEdit(product)} className="rounded-lg px-2 py-1 text-sm font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-800">编辑</button>
                         <button onClick={() => handleDelete(product)} className="rounded-lg px-2 py-1 text-sm font-semibold text-red-600 hover:bg-red-50 hover:text-red-800">删除</button>
                       </div>
@@ -674,29 +756,39 @@ export default function ProductDashboardPage() {
                 <span className="mb-2 block text-sm font-semibold text-slate-700">卖点补充（可空）</span>
                 <textarea rows={3} value={form.selling_points} onChange={(e) => setForm({ ...form, selling_points: e.target.value })} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder="请输入商品卖点、功能亮点或使用场景等补充信息" />
               </label>
-              <label className="block">
-                <span className="mb-2 block text-sm font-semibold text-slate-700">每种语言副本数</span>
-                <input type="number" min={1} max={20} value={form.copy_count} onChange={(e) => setForm({ ...form, copy_count: Number(e.target.value) })} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500 focus:ring-4 focus:ring-blue-50" />
-              </label>
-              <div>
-                <span className="mb-2 block text-sm font-semibold text-slate-700">副本语言</span>
-                <div className="flex flex-wrap gap-2">
+              <div className="md:col-span-2">
+                <span className="mb-2 block text-sm font-semibold text-slate-700">各语言副本数量</span>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {PRODUCT_LANGUAGES.map((language) => (
-                    <label key={language.code} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
+                    <label key={language.code} className={`rounded-2xl border px-4 py-3 shadow-sm transition-colors ${
+                      (form.languageCopyCounts[language.code] || 0) > 0
+                        ? 'border-blue-200 bg-blue-50/60'
+                        : 'border-slate-200 bg-white'
+                    }`}>
+                      <span className="mb-2 block text-sm font-semibold text-slate-700">{language.label}</span>
                       <input
-                        type="checkbox"
-                        checked={form.languages.includes(language.code)}
-                        onChange={() => {
-                          const next = form.languages.includes(language.code)
-                            ? form.languages.filter((code) => code !== language.code)
-                            : [...form.languages, language.code]
-                          setForm({ ...form, languages: next.length ? next : ['en'] })
+                        type="number"
+                        min={0}
+                        max={20}
+                        value={form.languageCopyCounts[language.code] || 0}
+                        onChange={(event) => {
+                          const value = Math.min(Math.max(Math.floor(Number(event.target.value || 0)), 0), 20)
+                          setForm({
+                            ...form,
+                            languageCopyCounts: {
+                              ...form.languageCopyCounts,
+                              [language.code]: value,
+                            },
+                          })
                         }}
+                        className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none transition-colors focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
                       />
-                      {language.label}
                     </label>
                   ))}
                 </div>
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  填 0 表示不生成该语言。例：英语 2、马来语 1、其他 0，会生成 3 个副本；每个副本都会重新生成标题、描述和 6 张图片。
+                </p>
               </div>
               {columns.map((column) => (
                 <label key={column.id} className="block">

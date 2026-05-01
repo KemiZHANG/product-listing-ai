@@ -12,6 +12,13 @@ function normalizeAttributes(value: unknown) {
   return value as Record<string, string>
 }
 
+function countCopiesByProduct(copies: Array<{ product_id: string }>) {
+  return copies.reduce<Record<string, number>>((counts, copy) => {
+    counts[copy.product_id] = (counts[copy.product_id] || 0) + 1
+    return counts
+  }, {})
+}
+
 export async function GET(request: NextRequest) {
   const supabase = getRequestSupabase(request)
   const { user, error: authError } = await getAuthenticatedUser(request)
@@ -48,7 +55,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json(data || [])
+  const products = data || []
+  const productIds = products.map((product) => product.id)
+  let copyCounts: Record<string, number> = {}
+
+  if (productIds.length > 0) {
+    const { data: copies } = await supabase
+      .from('product_copies')
+      .select('product_id')
+      .eq('user_id', user.id)
+      .in('product_id', productIds)
+    copyCounts = countCopiesByProduct(copies || [])
+  }
+
+  return NextResponse.json(products.map((product) => ({
+    ...product,
+    copy_count_generated: copyCounts[product.id] || 0,
+  })))
 }
 
 export async function POST(request: NextRequest) {

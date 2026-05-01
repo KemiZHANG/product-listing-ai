@@ -163,6 +163,8 @@ export async function POST(request: NextRequest) {
 
   let completed = 0
   let failed = 0
+  const failedCopyIds = new Set<string>()
+  const failedProductIds = new Set<string>()
   for (const copyImage of (copyImages || []) as CopyImageRecord[]) {
     const copy = copyRecords.find((item) => item.id === copyImage.copy_id)
     if (!copy) continue
@@ -170,6 +172,8 @@ export async function POST(request: NextRequest) {
     const sourceImages = imagesByProduct.get(copy.product_id) || []
     if (sourceImages.length === 0) {
       failed += 1
+      failedCopyIds.add(copyImage.copy_id)
+      failedProductIds.add(copy.product_id)
       await supabase
         .from('product_copy_images')
         .update({ status: 'failed', error_message: '商品没有原始参考图。' })
@@ -215,6 +219,8 @@ export async function POST(request: NextRequest) {
       completed += 1
     } catch (err) {
       failed += 1
+      failedCopyIds.add(copyImage.copy_id)
+      failedProductIds.add(copy.product_id)
       await supabase
         .from('product_copy_images')
         .update({
@@ -225,10 +231,40 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  await supabase
-    .from('product_copies')
-    .update({ status: failed > 0 ? 'needs_review' : 'completed' })
-    .in('id', copyRecords.map((copy) => copy.id))
+  const failedCopyIdList = Array.from(failedCopyIds)
+  const completedCopyIds = copyRecords
+    .map((copy) => copy.id)
+    .filter((copyId) => !failedCopyIds.has(copyId))
+
+  if (completedCopyIds.length > 0) {
+    await supabase
+      .from('product_copies')
+      .update({ status: 'completed', error_message: null })
+      .in('id', completedCopyIds)
+  }
+
+  if (failedCopyIdList.length > 0) {
+    await supabase
+      .from('product_copies')
+      .update({ status: 'needs_review' })
+      .in('id', failedCopyIdList)
+  }
+
+  const successfulProductIds = productIds.filter((productId) => !failedProductIds.has(productId))
+  if (successfulProductIds.length > 0) {
+    await supabase
+      .from('products')
+      .update({ status: 'completed', error_message: null })
+      .in('id', successfulProductIds)
+  }
+
+  const failedProductIdList = Array.from(failedProductIds)
+  if (failedProductIdList.length > 0) {
+    await supabase
+      .from('products')
+      .update({ status: 'needs_review', error_message: '部分副本或图片生成失败，请进入 Product Outputs 查看。' })
+      .in('id', failedProductIdList)
+  }
 
   return NextResponse.json({ completed, failed })
 }

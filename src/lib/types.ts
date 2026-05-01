@@ -160,6 +160,8 @@ export interface Product {
   copy_count_generated?: number
 }
 
+export const COPY_PLAN_ATTRIBUTE_KEY = '__language_copy_counts'
+
 export interface RuleTemplate {
   id: string
   user_id: string
