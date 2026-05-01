@@ -17,6 +17,7 @@ export default function ProductOutputDetailPage() {
   const [outputUrls, setOutputUrls] = useState<Record<string, string>>({})
   const [sourceUrls, setSourceUrls] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
+  const [downloadingAll, setDownloadingAll] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -77,6 +78,27 @@ export default function ProductOutputDetailPage() {
     document.body.removeChild(link)
   }
 
+  const downloadAllImages = async () => {
+    const images = (copy?.product_copy_images || [])
+      .filter((image) => image.output_storage_path)
+      .sort((a, b) => a.prompt_number - b.prompt_number)
+
+    if (images.length === 0) return
+
+    setDownloadingAll(true)
+    try {
+      for (const image of images) {
+        await downloadImage(
+          image.output_storage_path,
+          image.output_filename || `${copy?.sku || 'product'}_${copy?.language_label || ''}${copy?.copy_index || ''}_P${image.prompt_number}.png`
+        )
+        await new Promise((resolve) => setTimeout(resolve, 180))
+      }
+    } finally {
+      setDownloadingAll(false)
+    }
+  }
+
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">Loading...</div>
   }
@@ -95,14 +117,23 @@ export default function ProductOutputDetailPage() {
           <div className="rounded-[1.4rem] border border-slate-200 bg-white/88 p-12 text-center text-sm text-slate-500 shadow-sm">未找到副本。</div>
         ) : (
           <>
-            <section className="mb-6 border-b border-slate-200 pb-6">
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Listing copy detail</p>
-              <div className="mt-1 flex flex-wrap items-center gap-3">
-                <h1 className="text-4xl font-semibold tracking-tight text-slate-950">{copy.sku}</h1>
-                <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-100">{copy.language_label}{copy.copy_index}</span>
-                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">{copy.status}</span>
+            <section className="mb-6 flex flex-col gap-4 border-b border-slate-200 pb-6 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Listing copy detail</p>
+                <div className="mt-1 flex flex-wrap items-center gap-3">
+                  <h1 className="text-4xl font-semibold tracking-tight text-slate-950">{copy.sku}</h1>
+                  <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 ring-1 ring-blue-100">{copy.language_label}{copy.copy_index}</span>
+                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">{copy.status}</span>
+                </div>
+                <p className="mt-2 text-sm text-slate-500">{category ? `${category.icon} ${category.name_zh}` : '未关联类目'} · {new Date(copy.created_at).toLocaleString()}</p>
               </div>
-              <p className="mt-2 text-sm text-slate-500">{category ? `${category.icon} ${category.name_zh}` : '未关联类目'} · {new Date(copy.created_at).toLocaleString()}</p>
+              <button
+                onClick={downloadAllImages}
+                disabled={downloadingAll || !(copy.product_copy_images || []).some((image) => image.output_storage_path)}
+                className="w-fit rounded-2xl bg-[linear-gradient(135deg,#071228,#0f172a)] px-6 py-3 text-sm font-semibold text-white shadow-xl shadow-slate-950/18 transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-none disabled:bg-slate-300 disabled:shadow-none"
+              >
+                {downloadingAll ? '下载中...' : '下载全部图片'}
+              </button>
             </section>
 
             <div className="grid gap-5 lg:grid-cols-[420px_1fr]">

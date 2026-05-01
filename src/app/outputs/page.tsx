@@ -17,6 +17,8 @@ export default function OutputsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [page, setPage] = useState(1)
   const [fetching, setFetching] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [downloadingSelected, setDownloadingSelected] = useState(false)
 
   // Filters
   const [categorySlug, setCategorySlug] = useState('')
@@ -87,6 +89,10 @@ export default function OutputsPage() {
           })
         )
         setOutputUrls(Object.fromEntries(signedUrls))
+        setSelected((previous) => {
+          const currentIds = new Set((data.data || []).map((output: Output) => output.id))
+          return new Set(Array.from(previous).filter((id) => currentIds.has(id)))
+        })
       }
     } catch {
       // silent
@@ -140,6 +146,34 @@ export default function OutputsPage() {
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+  }
+
+  const toggleSelected = (id: string) => {
+    setSelected((previous) => {
+      const next = new Set(previous)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const selectAllCurrentPage = () => {
+    setSelected(new Set(outputs.map((output) => output.id)))
+  }
+
+  const downloadSelectedOutputs = async () => {
+    const selectedOutputs = outputs.filter((output) => selected.has(output.id))
+    if (selectedOutputs.length === 0) return
+
+    setDownloadingSelected(true)
+    try {
+      for (const output of selectedOutputs) {
+        await handleDownload(output)
+        await new Promise((resolve) => setTimeout(resolve, 180))
+      }
+    } finally {
+      setDownloadingSelected(false)
+    }
   }
 
   const getImageUrl = (storagePath: string) => {
@@ -244,11 +278,36 @@ export default function OutputsPage() {
         </div>
 
         {/* Results info */}
-        <div className="mb-4 flex items-center justify-between">
-          <p className="text-sm text-gray-500">
-            共 {total} 张图片
-          </p>
-          {fetching && <span className="text-xs text-gray-400">加载中...</span>}
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm text-gray-500">
+              共 {total} 张图片，当前已选 {selected.size} 张
+            </p>
+            {fetching && <span className="text-xs text-gray-400">加载中...</span>}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={selectAllCurrentPage}
+              disabled={outputs.length === 0}
+              className="rounded-xl border border-slate-300 bg-white/90 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              全选当前页
+            </button>
+            <button
+              onClick={() => setSelected(new Set())}
+              disabled={selected.size === 0}
+              className="rounded-xl border border-slate-300 bg-white/90 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              清空选择
+            </button>
+            <button
+              onClick={downloadSelectedOutputs}
+              disabled={selected.size === 0 || downloadingSelected}
+              className="rounded-xl bg-[linear-gradient(135deg,#071228,#0f172a)] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-slate-950/15 hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-none disabled:bg-slate-300 disabled:shadow-none"
+            >
+              {downloadingSelected ? '下载中...' : `下载所选 (${selected.size})`}
+            </button>
+          </div>
         </div>
 
         {/* Output grid */}
@@ -261,8 +320,17 @@ export default function OutputsPage() {
             {outputs.map((output) => (
               <div
                 key={output.id}
-                className="group relative overflow-hidden rounded-[1.4rem] border border-slate-200/80 bg-white/90 shadow-[0_18px_55px_rgba(15,23,42,0.05)] transition-all hover:-translate-y-1 hover:shadow-xl"
+                className={`group relative overflow-hidden rounded-[1.4rem] border bg-white/90 shadow-[0_18px_55px_rgba(15,23,42,0.05)] transition-all hover:-translate-y-1 hover:shadow-xl ${selected.has(output.id) ? 'border-blue-400 ring-2 ring-blue-100' : 'border-slate-200/80'}`}
               >
+                <label className="absolute left-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-xl bg-white/95 shadow-sm ring-1 ring-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(output.id)}
+                    onChange={() => toggleSelected(output.id)}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    aria-label={`选择 ${output.output_filename}`}
+                  />
+                </label>
                 {/* Image preview */}
                 <button
                   onClick={() => openPreview(output)}
