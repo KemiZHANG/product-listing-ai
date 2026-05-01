@@ -20,6 +20,18 @@ export function getPromptRoleLabel(role: string, number: number) {
   return DEFAULT_PROMPT_ROLES.find((item) => item.value === role)?.label || `自定义图 ${number}`
 }
 
+function getCopyVariation(copyIndex: number) {
+  const variations = [
+    '更偏干净高级的电商陈列感，背景极简，突出商品本体和质感。',
+    '更偏生活化使用场景，加入少量真实道具或环境元素，突出使用感。',
+    '更偏细节卖点表达，突出材质、容量、包装、结构或核心功能点。',
+    '更偏礼盒/套装/陈列氛围，构图更有层次，但不改变商品本体信息。',
+    '更偏清爽明亮的社媒电商风格，视觉轻盈，适合多语言副本区分。',
+    '更偏专业详情页风格，信息排版更理性，卖点顺序与其他副本不同。',
+  ]
+  return variations[(Math.max(copyIndex, 1) - 1) % variations.length]
+}
+
 export function buildProductImagePrompt(template: string, input: ProductPromptInput) {
   const attributes = Object.entries(input.attributes || {})
     .filter(([, value]) => String(value || '').trim())
@@ -39,6 +51,7 @@ export function buildProductImagePrompt(template: string, input: ProductPromptIn
     '',
     '【副本差异化要求】',
     `当前副本: ${input.languageLabel}${input.copyIndex}`,
+    `本副本差异化方向: ${getCopyVariation(input.copyIndex)}`,
     `图片中的新增文字必须使用${input.languageLabel}。如果模型无法稳定写长文字，只放短词或短句，并优先保证商品真实、清晰、合规。`,
     '在构图、背景、道具、光线、局部文字、细节呈现上做轻微差异，不要与其他副本完全相同，但不得改变商品本体、包装、标签、logo、颜色、比例和可见文字。',
     '',
@@ -59,6 +72,7 @@ export function buildTitleDescriptionPrompt(input: ProductPromptInput) {
     '【目标】',
     `语言: ${input.languageLabel}`,
     `副本: ${input.languageLabel}${input.copyIndex}`,
+    `本副本差异化方向: ${getCopyVariation(input.copyIndex)}`,
     '保持原始含义，不要大幅改写成另一个商品。不同副本之间要有轻微表达差异，但不能新增虚假卖点。',
     '',
     '【商品信息】',
