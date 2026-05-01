@@ -12,8 +12,6 @@ const NAV_LINKS = [
   { href: '/categories', label: 'Categories' },
   { href: '/product-outputs', label: 'Product Outputs' },
   { href: '/rules', label: 'Rules' },
-  { href: '/outputs', label: 'Legacy Outputs' },
-  { href: '/jobs', label: 'Legacy Jobs' },
   { href: '/settings', label: 'Settings' },
 ]
 
