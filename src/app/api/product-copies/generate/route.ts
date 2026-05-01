@@ -5,6 +5,7 @@ import { isBuiltinKeyEmailAuthorized } from '@/lib/builtin-key-access'
 import { buildProductImagePrompt, buildTitleDescriptionPrompt, defaultDetailPrompt, getLanguageLabel } from '@/lib/product-generation'
 import { parseStoredGeminiSettings, readBuiltinGeminiApiKey } from '@/lib/gemini-settings'
 import { COPY_PLAN_ATTRIBUTE_KEY, PRODUCT_LANGUAGES } from '@/lib/types'
+import { formatSeoKeywordPrompt, isSeoKeywordRule, parseSeoKeywordBank, type SeoKeywordBank } from '@/lib/seo-keywords'
 
 const ROLE_ORDER = ['main_1', 'main_2', 'model_scene_1', 'model_scene_2', 'detail_1', 'detail_2']
 
@@ -126,11 +127,18 @@ export async function POST(request: NextRequest) {
 
   const { data: rules } = await supabase
     .from('rule_templates')
-    .select('content')
+    .select('name,content,active')
     .eq('user_id', user.id)
     .eq('active', true)
 
-  const ruleText = (rules || []).map((rule) => rule.content).filter(Boolean).join('\n\n')
+  const ruleText = (rules || [])
+    .filter((rule) => !isSeoKeywordRule(rule.name, rule.content))
+    .map((rule) => rule.content)
+    .filter(Boolean)
+    .join('\n\n')
+  const seoKeywordBanks = (rules || [])
+    .map((rule) => parseSeoKeywordBank(rule.content))
+    .filter(Boolean) as SeoKeywordBank[]
   const textApiKey = await getTextGenerationApiKey(supabase, user.id, user.email)
 
   const { data: products, error: productError } = await supabase
@@ -191,6 +199,12 @@ export async function POST(request: NextRequest) {
     for (const { languageCode, count } of copyPlan) {
       const languageLabel = getLanguageLabel(languageCode)
       for (const copyIndex of copyIndexes(count)) {
+        const seoKeywordText = formatSeoKeywordPrompt(
+          seoKeywordBanks.find((bank) =>
+            bank.category_id === product.category_id &&
+            bank.language_code === languageCode
+          )
+        )
         const textResult = await generateTitleDescription(textApiKey, buildTitleDescriptionPrompt({
           sku: product.sku,
           sourceTitle: product.source_title,
@@ -201,6 +215,7 @@ export async function POST(request: NextRequest) {
           languageLabel,
           copyIndex,
           ruleText,
+          seoKeywordText,
         }))
 
         const { data: copy, error: copyError } = await supabase
@@ -238,6 +253,7 @@ export async function POST(request: NextRequest) {
             languageLabel,
             copyIndex,
             ruleText,
+            seoKeywordText,
           }),
           status: 'queued',
         }))

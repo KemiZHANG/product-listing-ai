@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
 import { ensureDefaultRuleTemplates } from '@/lib/default-rules'
+import { isSeoKeywordRule } from '@/lib/seo-keywords'
 
 export async function GET(request: NextRequest) {
   const supabase = getRequestSupabase(request)
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json(data || [])
+  return NextResponse.json((data || []).filter((rule) => !isSeoKeywordRule(rule.name, rule.content)))
 }
 
 export async function POST(request: NextRequest) {

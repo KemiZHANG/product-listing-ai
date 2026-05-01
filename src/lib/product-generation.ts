@@ -10,6 +10,7 @@ export type ProductPromptInput = {
   languageLabel: string
   copyIndex: number
   ruleText?: string | null
+  seoKeywordText?: string | null
 }
 
 export function getLanguageLabel(code: string) {
@@ -49,6 +50,8 @@ export function buildProductImagePrompt(template: string, input: ProductPromptIn
     input.sellingPoints ? `卖点补充: ${input.sellingPoints}` : '卖点补充: 未填写，请从商品图片、标题、描述和类目中提炼真实卖点。',
     attributes ? `自定义属性:\n${attributes}` : '自定义属性: 无',
     '',
+    input.seoKeywordText || '【SEO关键词库】未配置。图片文字只能从原始商品信息中提炼真实卖点。',
+    '',
     '【副本差异化要求】',
     `当前副本: ${input.languageLabel}${input.copyIndex}`,
     `本副本差异化方向: ${getCopyVariation(input.copyIndex)}`,
@@ -85,6 +88,8 @@ export function buildTitleDescriptionPrompt(input: ProductPromptInput) {
     '',
     '【标题规则】',
     '按“核心词 + 长尾词 + 属性词 + 场景词”组织。核心词靠前。不要关键词堆砌，不要表情符号，不要 hashtag，不要竞品品牌，不要极限词，不要医疗级/治疗/治愈/药用等表达。',
+    '',
+    input.seoKeywordText || '【SEO关键词库】未配置。请优先从原始标题、描述、属性和类目中提炼真实关键词，不要编造搜索词。',
     '',
     '【描述规则】',
     '按以下结构输出：核心卖点、规格参数、使用说明/适用人群、包裹内容、售后说明。分段清晰，避免站外联系方式、平台名导流、虚假宣传、乱码、HTML。',

@@ -12,6 +12,7 @@ const NAV_LINKS = [
   { href: '/categories', label: 'Categories' },
   { href: '/product-outputs', label: 'Product Outputs' },
   { href: '/outputs', label: 'Image Outputs' },
+  { href: '/seo-keywords', label: 'SEO Keywords' },
   { href: '/rules', label: 'Rules' },
   { href: '/settings', label: 'Settings' },
 ]
