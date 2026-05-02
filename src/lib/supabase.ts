@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { NextRequest } from 'next/server'
+import { isAllowedAppEmail } from './access-control'
 
 const fallbackSupabaseUrl = 'https://ytphdxldfifgafvypyuz.supabase.co'
 const fallbackSupabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0cGhkeGxkZmlmZ2FmdnlweXV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMzI1NzUsImV4cCI6MjA5MjYwODU3NX0.zDVi3v_D4IakcLFuyXVS8u1LTNerTIKcrIHv9dYDFfc'
@@ -60,6 +61,10 @@ export async function getAuthenticatedUser(request: NextRequest) {
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
   const { data, error } = await authClient.auth.getUser(token)
+
+  if (data.user && !isAllowedAppEmail(data.user.email)) {
+    return { user: null, error: 'Forbidden' }
+  }
 
   return {
     user: data.user,

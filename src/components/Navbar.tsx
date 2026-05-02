@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { isAdminEmail } from '@/lib/admin'
+import { isAllowedAppEmail } from '@/lib/access-control'
 
 const NAV_LINKS = [
   { href: '/', label: 'Products' },
@@ -25,8 +26,14 @@ export default function Navbar() {
     : NAV_LINKS
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
+    supabase.auth.getUser().then(async ({ data }) => {
       const email = data.user?.email ?? null
+      if (email && !isAllowedAppEmail(email)) {
+        await supabase.auth.signOut()
+        router.replace('/login')
+        router.refresh()
+        return
+      }
       setUserEmail(email)
     })
   }, [router])
