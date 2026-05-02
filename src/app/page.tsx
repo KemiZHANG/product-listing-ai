@@ -7,6 +7,14 @@ import { apiFetch } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
 import { COPY_PLAN_ATTRIBUTE_KEY, PRODUCT_LANGUAGES } from '@/lib/types'
 import type { Category, Product, ProductAttributeColumn } from '@/lib/types'
+import {
+  SHOPEE_CATEGORY_ATTRIBUTE_KEY,
+  SHOPEE_CATEGORY_TREE,
+  decodeShopeeCategorySelection,
+  encodeShopeeCategorySelection,
+  formatShopeeCategorySelection,
+} from '@/lib/shopee-categories'
+import type { ShopeeCategoryNode, ShopeeCategorySelection } from '@/lib/shopee-categories'
 
 type ProductForm = {
   id?: string
@@ -16,6 +24,7 @@ type ProductForm = {
   source_description: string
   selling_points: string
   languageCopyCounts: Record<string, number>
+  shopeeCategory: ShopeeCategorySelection | null
   attributes: Record<string, string>
 }
 
@@ -30,6 +39,7 @@ const emptyForm: ProductForm = {
   source_description: '',
   selling_points: '',
   languageCopyCounts: defaultLanguageCopyCounts,
+  shopeeCategory: null,
   attributes: {},
 }
 
@@ -59,7 +69,12 @@ function parseLanguageCopyCounts(product?: Product | null) {
 function publicAttributes(attributes?: Record<string, string> | null) {
   const next = { ...(attributes || {}) }
   delete next[COPY_PLAN_ATTRIBUTE_KEY]
+  delete next[SHOPEE_CATEGORY_ATTRIBUTE_KEY]
   return next
+}
+
+function productShopeeCategory(product: Product) {
+  return decodeShopeeCategorySelection(product.attributes?.[SHOPEE_CATEGORY_ATTRIBUTE_KEY])
 }
 
 function languageCopyTotal(product: Product) {
@@ -84,8 +99,94 @@ function normalizeForm(product?: Product | null): ProductForm {
     source_description: product.source_description || '',
     selling_points: product.selling_points || '',
     languageCopyCounts: parseLanguageCopyCounts(product),
+    shopeeCategory: decodeShopeeCategorySelection(product.attributes?.[SHOPEE_CATEGORY_ATTRIBUTE_KEY]),
     attributes: publicAttributes(product.attributes),
   }
+}
+
+function ShopeeCategoryPicker({
+  value,
+  onChange,
+}: {
+  value: ShopeeCategorySelection | null
+  onChange: (selection: ShopeeCategorySelection | null) => void
+}) {
+  const [activePath, setActivePath] = useState<string[]>(value?.path || [])
+
+  useEffect(() => {
+    setActivePath(value?.path || [])
+  }, [value])
+
+  const columns: Array<{ nodes: ShopeeCategoryNode[]; level: number }> = []
+  let nodes = SHOPEE_CATEGORY_TREE
+  columns.push({ nodes, level: 0 })
+  for (let index = 0; index < activePath.length; index += 1) {
+    const node = nodes.find((item) => item.name === activePath[index])
+    if (!node?.children?.length) break
+    nodes = node.children
+    columns.push({ nodes, level: index + 1 })
+  }
+
+  const selectedText = formatShopeeCategorySelection(value)
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <span className="block text-sm font-semibold text-slate-700">Shopee 类目</span>
+          <span className="mt-1 block text-xs text-slate-500">仅用于标注员工上品时应选择的 Shopee 叶类目，不参与 AI 生成。</span>
+        </div>
+        {value && (
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+          >
+            清空选择
+          </button>
+        )}
+      </div>
+      <div className="flex gap-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-3">
+        {columns.map((column) => (
+          <div key={column.level} className="min-w-[220px] border-r border-slate-100 pr-3 last:border-r-0">
+            <div className="mb-2 text-xs font-semibold uppercase text-slate-400">Level {column.level + 1}</div>
+            <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+              {column.nodes.map((node) => {
+                const isActive = activePath[column.level] === node.name
+                const nextPath = [...activePath.slice(0, column.level), node.name]
+                const isLeaf = !node.children?.length
+                return (
+                  <button
+                    key={`${column.level}-${node.name}`}
+                    type="button"
+                    onClick={() => {
+                      setActivePath(nextPath)
+                      if (isLeaf) onChange({ path: nextPath, id: node.id })
+                    }}
+                    className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-red-50 text-red-600'
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
+                    }`}
+                  >
+                    <span>{node.name}</span>
+                    {isLeaf ? (
+                      node.id ? <span className="text-xs text-slate-400">{node.id}</span> : null
+                    ) : (
+                      <span className="text-slate-400">›</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 rounded-xl bg-white px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-200">
+        当前选择：<span className="font-semibold text-slate-950">{selectedText || '未选择'}</span>
+      </div>
+    </div>
+  )
 }
 
 const statCards = [
@@ -190,7 +291,7 @@ export default function ProductDashboardPage() {
   }
 
   const openCreate = () => {
-    setForm({ ...emptyForm, languageCopyCounts: { ...defaultLanguageCopyCounts }, attributes: {} })
+    setForm({ ...emptyForm, languageCopyCounts: { ...defaultLanguageCopyCounts }, shopeeCategory: null, attributes: {} })
     setSourceFiles([])
     setFormOpen(true)
   }
@@ -272,6 +373,7 @@ export default function ProductDashboardPage() {
         attributes: {
           ...form.attributes,
           [COPY_PLAN_ATTRIBUTE_KEY]: JSON.stringify(normalizedCounts),
+          [SHOPEE_CATEGORY_ATTRIBUTE_KEY]: encodeShopeeCategorySelection(form.shopeeCategory),
         },
       }
       const res = await apiFetch(form.id ? `/api/products/${form.id}` : '/api/products', {
@@ -524,6 +626,7 @@ export default function ProductDashboardPage() {
                   <th className="min-w-[220px] px-3 py-3">原始标题</th>
                   <th className="min-w-[260px] px-3 py-3">原始描述</th>
                   <th className="px-3 py-3">类目</th>
+                  <th className="min-w-[240px] px-3 py-3">Shopee 类目</th>
                   <th className="px-3 py-3">副本/语言</th>
                   {columns.map((column) => <th key={column.id} className="px-3 py-3">{column.name}</th>)}
                   <th className="px-3 py-3">状态</th>
@@ -533,7 +636,7 @@ export default function ProductDashboardPage() {
               <tbody className="divide-y divide-slate-100">
                 {products.length === 0 ? (
                   <tr>
-                    <td colSpan={10 + columns.length} className="px-4 py-20 text-center">
+                    <td colSpan={11 + columns.length} className="px-4 py-20 text-center">
                       <div className="mx-auto flex max-w-lg flex-col items-center">
                         <div className="relative mb-5 flex h-24 w-24 items-center justify-center rounded-3xl bg-blue-50 text-5xl shadow-inner">
                           📦
@@ -582,6 +685,11 @@ export default function ProductDashboardPage() {
                     <td className="px-3 py-3 whitespace-nowrap">
                       {product.categories ? `${product.categories.icon} ${product.categories.name_zh}` : <span className="text-red-500">未选择</span>}
                     </td>
+                    <td className="px-3 py-3 text-slate-500">
+                      <div className="line-clamp-3 min-w-[220px] text-xs leading-5">
+                        {formatShopeeCategorySelection(productShopeeCategory(product)) || '-'}
+                      </div>
+                    </td>
                     <td className="px-3 py-3">
                       <div className="whitespace-nowrap text-slate-700">{languageCopyTotal(product)} 组</div>
                       <div className="mt-1 flex max-w-[200px] flex-wrap gap-1 text-xs text-slate-500">
@@ -610,7 +718,7 @@ export default function ProductDashboardPage() {
                         {(product.images || []).length === 0
                           ? '缺少原图'
                           : product.copy_count_generated
-                            ? `已生成 ${product.copy_count_generated} 个，可重生成`
+                            ? `已生成 ${product.copy_count_generated} 个`
                             : product.status}
                       </span>
                     </td>
@@ -756,6 +864,12 @@ export default function ProductDashboardPage() {
                 <span className="mb-2 block text-sm font-semibold text-slate-700">卖点补充（可空）</span>
                 <textarea rows={3} value={form.selling_points} onChange={(e) => setForm({ ...form, selling_points: e.target.value })} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder="请输入商品卖点、功能亮点或使用场景等补充信息" />
               </label>
+              <div className="md:col-span-2">
+                <ShopeeCategoryPicker
+                  value={form.shopeeCategory}
+                  onChange={(selection) => setForm({ ...form, shopeeCategory: selection })}
+                />
+              </div>
               <div className="md:col-span-2">
                 <span className="mb-2 block text-sm font-semibold text-slate-700">各语言副本数量</span>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

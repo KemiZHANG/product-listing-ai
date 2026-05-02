@@ -1,18 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
+import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 import { defaultDetailPrompt } from '@/lib/product-generation'
 
+type EnrichedCategory = {
+  id: string
+  name_zh: string
+  slug: string
+  sort_order: number
+  prompt_count: number
+  image_count: number
+  created_at?: string
+} & Record<string, unknown>
+
+function baseCategorySlug(slug: string) {
+  return slug.replace(/-migrated-\d+$/, '')
+}
+
+function preferVisibleCategory(current: EnrichedCategory, next: EnrichedCategory) {
+  if (next.prompt_count !== current.prompt_count) return next.prompt_count > current.prompt_count ? next : current
+  const currentIsBase = current.slug === baseCategorySlug(current.slug)
+  const nextIsBase = next.slug === baseCategorySlug(next.slug)
+  if (nextIsBase !== currentIsBase) return nextIsBase ? next : current
+  return new Date(next.created_at || 0).getTime() < new Date(current.created_at || 0).getTime() ? next : current
+}
+
+function dedupeVisibleCategories(categories: EnrichedCategory[]) {
+  const byBaseSlug = new Map<string, EnrichedCategory>()
+  for (const category of categories) {
+    const key = `${baseCategorySlug(category.slug)}:${category.name_zh || ''}`
+    const existing = byBaseSlug.get(key)
+    byBaseSlug.set(key, existing ? preferVisibleCategory(existing, category) : category)
+  }
+  return Array.from(byBaseSlug.values()).sort((a, b) => {
+    const sortA = Number(a.sort_order ?? 0)
+    const sortB = Number(b.sort_order ?? 0)
+    if (sortA !== sortB) return sortA - sortB
+    return String(a.slug).localeCompare(String(b.slug))
+  })
+}
+
 export async function GET(request: NextRequest) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const { data: categories, error } = await supabase
     .from('categories')
     .select('*')
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
     .order('sort_order', { ascending: true })
 
   if (error) {
@@ -43,13 +80,13 @@ export async function GET(request: NextRequest) {
     image_count: imageCounts.get(cat.id) || 0,
   }))
 
-  return NextResponse.json(enriched)
+  return NextResponse.json(dedupeVisibleCategories(enriched))
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -60,15 +97,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'name_zh and slug are required' }, { status: 400 })
   }
 
-  // Check slug uniqueness per user
+  const normalizedSlug = slug.replace(/-migrated-\d+$/, '')
+
+  // Check slug uniqueness per workspace, including old migrated duplicates.
   const { data: existing } = await supabase
     .from('categories')
-    .select('id')
-    .eq('user_id', user.id)
-    .eq('slug', slug)
-    .maybeSingle()
+    .select('id,slug')
+    .eq('workspace_key', workspaceKey)
+    .or(`slug.eq.${normalizedSlug},slug.like.${normalizedSlug}-migrated-%`)
+    .limit(1)
 
-  if (existing) {
+  if (existing?.length) {
     return NextResponse.json({ error: 'Slug already exists' }, { status: 409 })
   }
 
@@ -76,7 +115,7 @@ export async function POST(request: NextRequest) {
   const { data: maxSort } = await supabase
     .from('categories')
     .select('sort_order')
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
     .order('sort_order', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -87,8 +126,9 @@ export async function POST(request: NextRequest) {
     .from('categories')
     .insert({
       user_id: user.id,
+      workspace_key: workspaceKey,
       name_zh,
-      slug,
+      slug: normalizedSlug,
       icon: icon || '📦',
       sort_order: nextSortOrder,
     })

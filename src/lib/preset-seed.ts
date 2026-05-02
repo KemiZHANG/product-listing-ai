@@ -1,22 +1,27 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { PRESET_CATEGORIES } from './presets'
 import { defaultDetailPrompt } from './product-generation'
+import { INTERNAL_WORKSPACE_KEY, type WorkspaceKey } from './workspace'
 
 export async function ensurePresetCategoriesForUser(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  workspaceKey: WorkspaceKey = INTERNAL_WORKSPACE_KEY
 ) {
   const { data: existingCategories, error: existingError } = await supabase
     .from('categories')
     .select('id, slug')
-    .eq('user_id', userId)
+    .eq('workspace_key', workspaceKey)
 
   if (existingError) {
     throw existingError
   }
 
   const existingBySlug = new Map(
-    (existingCategories || []).map((category) => [category.slug, category.id])
+    (existingCategories || []).map((category) => [
+      String(category.slug).replace(/-migrated-\d+$/, ''),
+      category.id,
+    ])
   )
   const missingPresets = PRESET_CATEGORIES.filter((preset) => !existingBySlug.has(preset.slug))
 
@@ -26,6 +31,7 @@ export async function ensurePresetCategoriesForUser(
 
   const rows = missingPresets.map((preset) => ({
     user_id: userId,
+    workspace_key: workspaceKey,
     name_zh: preset.name_zh,
     slug: preset.slug,
     icon: preset.icon,

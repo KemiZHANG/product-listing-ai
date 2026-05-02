@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { isAdminEmail } from '@/lib/admin'
 import { isBuiltinKeyEmailAuthorized } from '@/lib/builtin-key-access'
 import { parseStoredGeminiSettings, readBuiltinGeminiApiKey } from '@/lib/gemini-settings'
-import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
+import { getRequestSupabase } from '@/lib/supabase'
+import { AI_ACCESS_ERROR, getGenerationAccess } from '@/lib/generation-access'
+import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 
 export const maxDuration = 300
 
@@ -113,10 +115,15 @@ async function generateImage(apiKey: string, promptText: string, references: Arr
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const access = await getGenerationAccess(supabase, user.id, user.email)
+  if (!access.allowed) {
+    return NextResponse.json({ error: AI_ACCESS_ERROR, code: 'AI_ACCESS_REQUIRED' }, { status: 403 })
   }
 
   const apiKey = await getImageApiKey(supabase, user.id, user.email)
@@ -135,7 +142,7 @@ export async function POST(request: NextRequest) {
   const { data: copies } = await supabase
     .from('product_copies')
     .select('id, product_id')
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
     .in('id', copyIds)
 
   const copyRecords = (copies || []) as CopyRecord[]

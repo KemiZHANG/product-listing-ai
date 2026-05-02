@@ -8,6 +8,11 @@ import { apiFetch } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
 import { PRODUCT_LANGUAGES } from '@/lib/types'
 import type { Category, ProductCopy } from '@/lib/types'
+import {
+  SHOPEE_CATEGORY_ATTRIBUTE_KEY,
+  decodeShopeeCategorySelection,
+  formatShopeeCategorySelection,
+} from '@/lib/shopee-categories'
 
 export default function ProductOutputsPage() {
   const router = useRouter()
@@ -19,6 +24,7 @@ export default function ProductOutputsPage() {
   const [language, setLanguage] = useState('')
   const [date, setDate] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [savingNoteId, setSavingNoteId] = useState<string | null>(null)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -47,6 +53,25 @@ export default function ProductOutputsPage() {
     }
     setCopies(data || [])
   }, [sku, categoryId, language, date])
+
+  const updateCopyNote = async (copyId: string, staffNote: string) => {
+    setSavingNoteId(copyId)
+    setError(null)
+    const res = await apiFetch(`/api/product-copies/${copyId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ staff_note: staffNote }),
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok) {
+      setError(data?.error || '备注保存失败')
+    } else {
+      setCopies((previous) => previous.map((copy) => (
+        copy.id === copyId ? { ...copy, staff_note: data.staff_note || '' } : copy
+      )))
+    }
+    setSavingNoteId(null)
+  }
 
   useEffect(() => {
     if (!loading) {
@@ -110,9 +135,12 @@ export default function ProductOutputsPage() {
             {copies.map((copy) => {
               const product = copy.products
               const category = product?.categories
+              const shopeeCategory = formatShopeeCategorySelection(
+                decodeShopeeCategorySelection(product?.attributes?.[SHOPEE_CATEGORY_ATTRIBUTE_KEY])
+              )
               const completedImages = (copy.product_copy_images || []).filter((image) => image.status === 'completed').length
               return (
-                <Link key={copy.id} href={`/product-outputs/${copy.id}`} className="block rounded-[1.4rem] border border-slate-200/80 bg-white/88 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur transition-all hover:-translate-y-1 hover:border-blue-300 hover:shadow-xl hover:shadow-slate-200/70">
+                <article key={copy.id} className="rounded-[1.4rem] border border-slate-200/80 bg-white/88 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur transition-all hover:-translate-y-1 hover:border-blue-300 hover:shadow-xl hover:shadow-slate-200/70">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="font-mono text-xl font-semibold text-slate-950">{copy.sku}</div>
@@ -125,10 +153,34 @@ export default function ProductOutputsPage() {
                     <div className="text-right text-xs text-slate-400">{new Date(copy.created_at).toLocaleString()}</div>
                   </div>
                   <div className="mt-3 text-xs text-slate-500">{category ? `${category.icon} ${category.name_zh}` : '未关联类目'}</div>
+                  {shopeeCategory && (
+                    <div className="mt-2 rounded-xl bg-orange-50 px-3 py-2 text-xs font-semibold leading-5 text-orange-700 ring-1 ring-orange-100">
+                      Shopee 类目：{shopeeCategory}
+                    </div>
+                  )}
                   <h2 className="mt-3 line-clamp-2 text-sm font-semibold text-slate-900">{copy.generated_title || product?.source_title || '标题待生成'}</h2>
                   <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-500">{copy.generated_description || product?.source_description || '描述待生成'}</p>
-                  <div className="mt-4 text-right text-sm font-semibold text-slate-900">打开详情 →</div>
-                </Link>
+                  <label className="mt-4 block">
+                    <span className="mb-2 block text-xs font-semibold text-slate-500">员工备注</span>
+                    <textarea
+                      rows={3}
+                      defaultValue={copy.staff_note || ''}
+                      onBlur={(event) => {
+                        if (event.currentTarget.value !== (copy.staff_note || '')) {
+                          updateCopyNote(copy.id, event.currentTarget.value)
+                        }
+                      }}
+                      placeholder="例如：已上品 / 店铺A / 负责人 / 异常说明"
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm leading-6 text-slate-700 outline-none transition-colors focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                    />
+                  </label>
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    <span className="text-xs text-slate-400">{savingNoteId === copy.id ? '备注保存中...' : '备注离开输入框后自动保存'}</span>
+                    <Link href={`/product-outputs/${copy.id}`} className="text-sm font-semibold text-slate-900 hover:text-blue-700">
+                      打开详情 →
+                    </Link>
+                  </div>
+                </article>
               )
             })}
           </div>

@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
+import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -22,11 +22,12 @@ export async function PUT(
   // Verify ownership through category
   const { data: image } = await supabase
     .from('category_images')
-    .select('*, categories!inner(user_id)')
+    .select('*, categories!inner(workspace_key)')
     .eq('id', id)
+    .eq('categories.workspace_key', workspaceKey)
     .maybeSingle()
 
-  if (!image || (image.categories as unknown as { user_id: string }).user_id !== user.id) {
+  if (!image) {
     return NextResponse.json({ error: 'Image not found' }, { status: 404 })
   }
 
@@ -48,9 +49,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -59,11 +60,12 @@ export async function DELETE(
   // Verify ownership through category and get storage path
   const { data: image } = await supabase
     .from('category_images')
-    .select('*, categories!inner(user_id)')
+    .select('*, categories!inner(workspace_key)')
     .eq('id', id)
+    .eq('categories.workspace_key', workspaceKey)
     .maybeSingle()
 
-  if (!image || (image.categories as unknown as { user_id: string }).user_id !== user.id) {
+  if (!image) {
     return NextResponse.json({ error: 'Image not found' }, { status: 404 })
   }
 

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
 import {
   buildSeoKeywordRuleName,
   parseSeoKeywordBank,
@@ -7,6 +6,8 @@ import {
   SEO_KEYWORD_RULE_PREFIX,
   normalizeSeoKeywords,
 } from '@/lib/seo-keywords'
+import { ensureDefaultSeoKeywordBanks, mergeSeoKeywords } from '@/lib/default-seo-keywords'
+import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 
 type RuleTemplateRow = {
   id: string
@@ -17,24 +18,24 @@ type RuleTemplateRow = {
 }
 
 async function ensureCategory(
-  supabase: ReturnType<typeof getRequestSupabase>,
-  userId: string,
+  supabase: ReturnType<typeof getWorkspaceSupabase>,
+  workspaceKey: string,
   categoryId: string
 ) {
   const { data } = await supabase
     .from('categories')
     .select('id')
     .eq('id', categoryId)
-    .eq('user_id', userId)
+    .eq('workspace_key', workspaceKey)
     .maybeSingle()
 
   return Boolean(data)
 }
 
 export async function GET(request: NextRequest) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -42,10 +43,16 @@ export async function GET(request: NextRequest) {
   const categoryId = searchParams.get('category_id')?.trim()
   const languageCode = searchParams.get('language_code')?.trim()
 
+  try {
+    await ensureDefaultSeoKeywordBanks(supabase, user.id, workspaceKey)
+  } catch {
+    // Keep the SEO page usable even if initial seeding hits a migration race.
+  }
+
   const { data, error } = await supabase
     .from('rule_templates')
     .select('id,name,content,active,updated_at')
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
     .like('name', `${SEO_KEYWORD_RULE_PREFIX}%`)
     .order('updated_at', { ascending: false })
 
@@ -66,9 +73,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -80,13 +87,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'category_id and language_code are required' }, { status: 400 })
   }
 
-  const categoryExists = await ensureCategory(supabase, user.id, categoryId)
+  const categoryExists = await ensureCategory(supabase, workspaceKey, categoryId)
   if (!categoryExists) {
     return NextResponse.json({ error: 'Category not found' }, { status: 404 })
   }
 
-  const keywords = normalizeSeoKeywords(body.keywords)
+  const incomingKeywords = normalizeSeoKeywords(body.keywords)
   const name = buildSeoKeywordRuleName(categoryId, languageCode)
+  const mode = body.mode === 'replace' ? 'replace' : 'append'
+
+  const { data: existing } = await supabase
+    .from('rule_templates')
+    .select('content')
+    .eq('workspace_key', workspaceKey)
+    .eq('name', name)
+    .maybeSingle()
+
+  const existingKeywords = parseSeoKeywordBank(existing?.content || '')?.keywords || []
+  const keywords = mode === 'replace'
+    ? incomingKeywords
+    : mergeSeoKeywords(existingKeywords, incomingKeywords)
   const content = serializeSeoKeywordBank({
     category_id: categoryId,
     language_code: languageCode,
@@ -99,12 +119,13 @@ export async function POST(request: NextRequest) {
     .upsert(
       {
         user_id: user.id,
+        workspace_key: workspaceKey,
         name,
         scope: 'title_description',
         content,
         active: body.active !== false,
       },
-      { onConflict: 'user_id,name' }
+      { onConflict: 'workspace_key,name' }
     )
     .select('id,name,content,active,updated_at')
     .single()
@@ -118,9 +139,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -135,7 +156,7 @@ export async function DELETE(request: NextRequest) {
   const { error } = await supabase
     .from('rule_templates')
     .delete()
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
     .eq('name', buildSeoKeywordRuleName(categoryId, languageCode))
 
   if (error) {

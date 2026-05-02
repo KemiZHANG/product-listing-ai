@@ -2,16 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { isAdminEmail } from '@/lib/admin'
 import { isBuiltinKeyEmailAuthorized } from '@/lib/builtin-key-access'
 import { parseStoredGeminiSettings, readBuiltinGeminiApiKey } from '@/lib/gemini-settings'
-import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
 import { PRODUCT_LANGUAGES } from '@/lib/types'
 import { normalizeSeoKeywords, type SeoKeyword, type SeoKeywordType } from '@/lib/seo-keywords'
+import { AI_ACCESS_ERROR, getGenerationAccess } from '@/lib/generation-access'
+import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 
 type KeywordPayload = {
   keywords?: Array<Partial<SeoKeyword> & { type?: SeoKeywordType }>
 }
 
 async function getTextGenerationApiKey(
-  supabase: ReturnType<typeof getRequestSupabase>,
+  supabase: ReturnType<typeof getWorkspaceSupabase>,
   userId: string,
   userEmail?: string | null
 ) {
@@ -58,10 +59,15 @@ async function generateKeywords(apiKey: string, prompt: string) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const access = await getGenerationAccess(supabase, user.id, user.email)
+  if (!access.allowed) {
+    return NextResponse.json({ error: AI_ACCESS_ERROR, code: 'AI_ACCESS_REQUIRED' }, { status: 403 })
   }
 
   const body = await request.json()
@@ -78,12 +84,12 @@ export async function POST(request: NextRequest) {
       .from('categories')
       .select('id,name_zh,slug')
       .eq('id', categoryId)
-      .eq('user_id', user.id)
+      .eq('workspace_key', workspaceKey)
       .maybeSingle(),
     supabase
       .from('rule_templates')
       .select('content')
-      .eq('user_id', user.id)
+      .eq('workspace_key', workspaceKey)
       .eq('active', true),
   ])
 

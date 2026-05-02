@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
+import { getRequestSupabase } from '@/lib/supabase'
 import {
   createGeminiBatch,
   decodeBatchMeta,
@@ -28,6 +28,8 @@ import {
   uploadOpenAIBatchInputFile,
   uploadOpenAIVisionFile,
 } from '@/lib/openai-image'
+import { AI_ACCESS_ERROR, getGenerationAccess } from '@/lib/generation-access'
+import { getWorkspaceContext, getWorkspaceSupabase, type WorkspaceKey } from '@/lib/workspace'
 
 export const maxDuration = 300
 
@@ -36,6 +38,7 @@ type RequestSupabase = ReturnType<typeof getRequestSupabase>
 type JobRecord = {
   id: string
   user_id: string
+  workspace_key?: WorkspaceKey
   status: string
   total_items: number
   error_message: string | null
@@ -402,6 +405,7 @@ async function processBatchResults(supabase: RequestSupabase, apiKey: string, jo
       job_id: job.id,
       job_item_id: item.id,
       user_id: job.user_id,
+      workspace_key: job.workspace_key || 'external',
       category_id: snapshot?.category_id || '',
       category_slug: snapshot?.category_slug || '',
       image_display_name: item.image_display_name,
@@ -509,6 +513,7 @@ async function uploadJobOutput(
     job_id: job.id,
     job_item_id: item.id,
     user_id: job.user_id,
+    workspace_key: job.workspace_key || 'external',
     category_id: snapshot?.category_id || '',
     category_slug: snapshot?.category_slug || '',
     image_display_name: item.image_display_name,
@@ -945,6 +950,7 @@ async function runDirectJob(supabase: RequestSupabase, apiKey: string, job: JobR
         job_id: job.id,
         job_item_id: item.id,
         user_id: job.user_id,
+        workspace_key: job.workspace_key || 'external',
         category_id: snapshot?.category_id || '',
         category_slug: snapshot?.category_slug || '',
         image_display_name: item.image_display_name,
@@ -1061,10 +1067,15 @@ async function runOrPollBatchJob(supabase: RequestSupabase, job: JobRecord, user
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const access = await getGenerationAccess(supabase, user.id, user.email)
+  if (!access.allowed) {
+    return NextResponse.json({ error: AI_ACCESS_ERROR, code: 'AI_ACCESS_REQUIRED' }, { status: 403 })
   }
 
   const body = await request.json()
@@ -1078,7 +1089,7 @@ export async function POST(request: NextRequest) {
     .from('jobs')
     .select('*')
     .eq('id', job_id)
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
     .single()
 
   if (jobError || !job) {

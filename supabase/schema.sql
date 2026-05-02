@@ -20,6 +20,7 @@ VALUES ('outputs', 'outputs', false)
 ON CONFLICT (id) DO NOTHING;
 
 -- Storage RLS: users can only manage files in their own folder (user_id prefix)
+DROP POLICY IF EXISTS "Users can upload images to their own folder" ON storage.objects;
 CREATE POLICY "Users can upload images to their own folder"
 ON storage.objects FOR INSERT
 WITH CHECK (
@@ -27,6 +28,7 @@ WITH CHECK (
   AND (storage.foldername(name))[1] = auth.uid()::text
 );
 
+DROP POLICY IF EXISTS "Users can view their own images" ON storage.objects;
 CREATE POLICY "Users can view their own images"
 ON storage.objects FOR SELECT
 USING (
@@ -34,6 +36,7 @@ USING (
   AND (storage.foldername(name))[1] = auth.uid()::text
 );
 
+DROP POLICY IF EXISTS "Users can update their own images" ON storage.objects;
 CREATE POLICY "Users can update their own images"
 ON storage.objects FOR UPDATE
 USING (
@@ -41,6 +44,7 @@ USING (
   AND (storage.foldername(name))[1] = auth.uid()::text
 );
 
+DROP POLICY IF EXISTS "Users can delete their own images" ON storage.objects;
 CREATE POLICY "Users can delete their own images"
 ON storage.objects FOR DELETE
 USING (
@@ -48,6 +52,7 @@ USING (
   AND (storage.foldername(name))[1] = auth.uid()::text
 );
 
+DROP POLICY IF EXISTS "Users can upload outputs to their own folder" ON storage.objects;
 CREATE POLICY "Users can upload outputs to their own folder"
 ON storage.objects FOR INSERT
 WITH CHECK (
@@ -55,6 +60,7 @@ WITH CHECK (
   AND (storage.foldername(name))[1] = auth.uid()::text
 );
 
+DROP POLICY IF EXISTS "Users can view their own outputs" ON storage.objects;
 CREATE POLICY "Users can view their own outputs"
 ON storage.objects FOR SELECT
 USING (
@@ -62,6 +68,7 @@ USING (
   AND (storage.foldername(name))[1] = auth.uid()::text
 );
 
+DROP POLICY IF EXISTS "Users can update their own outputs" ON storage.objects;
 CREATE POLICY "Users can update their own outputs"
 ON storage.objects FOR UPDATE
 USING (
@@ -69,6 +76,7 @@ USING (
   AND (storage.foldername(name))[1] = auth.uid()::text
 );
 
+DROP POLICY IF EXISTS "Users can delete their own outputs" ON storage.objects;
 CREATE POLICY "Users can delete their own outputs"
 ON storage.objects FOR DELETE
 USING (
@@ -89,14 +97,17 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view their own profile" ON public.profiles;
 CREATE POLICY "Users can view their own profile"
 ON public.profiles FOR SELECT
 USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
 CREATE POLICY "Users can update their own profile"
 ON public.profiles FOR UPDATE
 USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users can insert their own profile" ON public.profiles;
 CREATE POLICY "Users can insert their own profile"
 ON public.profiles FOR INSERT
 WITH CHECK (auth.uid() = id);
@@ -129,6 +140,7 @@ CREATE TRIGGER on_auth_user_created
 CREATE TABLE IF NOT EXISTS public.categories (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id     UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  workspace_key TEXT NOT NULL DEFAULT 'external' CHECK (workspace_key IN ('internal','external')),
   name_zh     TEXT NOT NULL,
   slug        TEXT NOT NULL,
   icon        TEXT NOT NULL DEFAULT '📦',
@@ -136,18 +148,19 @@ CREATE TABLE IF NOT EXISTS public.categories (
   is_preset   BOOLEAN NOT NULL DEFAULT false,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (user_id, slug)
+  UNIQUE (workspace_key, slug)
 );
 
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can CRUD their own categories" ON public.categories;
 CREATE POLICY "Users can CRUD their own categories"
 ON public.categories FOR ALL
 USING (auth.uid() = user_id)
 WITH CHECK (auth.uid() = user_id);
 
-CREATE INDEX idx_categories_user_id ON public.categories(user_id);
-CREATE INDEX idx_categories_user_sort ON public.categories(user_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_categories_user_id ON public.categories(user_id);
+CREATE INDEX IF NOT EXISTS idx_categories_user_sort ON public.categories(user_id, sort_order);
 
 -- ---------------------------------------------------------------------------
 -- 4. Category Prompts
@@ -164,6 +177,7 @@ CREATE TABLE IF NOT EXISTS public.category_prompts (
 
 ALTER TABLE public.category_prompts ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can CRUD prompts in their own categories" ON public.category_prompts;
 CREATE POLICY "Users can CRUD prompts in their own categories"
 ON public.category_prompts FOR ALL
 USING (
@@ -181,8 +195,8 @@ WITH CHECK (
   )
 );
 
-CREATE INDEX idx_category_prompts_category_id ON public.category_prompts(category_id);
-CREATE INDEX idx_category_prompts_number ON public.category_prompts(category_id, prompt_number);
+CREATE INDEX IF NOT EXISTS idx_category_prompts_category_id ON public.category_prompts(category_id);
+CREATE INDEX IF NOT EXISTS idx_category_prompts_number ON public.category_prompts(category_id, prompt_number);
 
 -- ---------------------------------------------------------------------------
 -- 5. Category Images
@@ -198,6 +212,7 @@ CREATE TABLE IF NOT EXISTS public.category_images (
 
 ALTER TABLE public.category_images ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can CRUD images in their own categories" ON public.category_images;
 CREATE POLICY "Users can CRUD images in their own categories"
 ON public.category_images FOR ALL
 USING (
@@ -215,7 +230,7 @@ WITH CHECK (
   )
 );
 
-CREATE INDEX idx_category_images_category_id ON public.category_images(category_id);
+CREATE INDEX IF NOT EXISTS idx_category_images_category_id ON public.category_images(category_id);
 
 -- ---------------------------------------------------------------------------
 -- 6. Jobs
@@ -223,6 +238,7 @@ CREATE INDEX idx_category_images_category_id ON public.category_images(category_
 CREATE TABLE IF NOT EXISTS public.jobs (
   id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id          UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  workspace_key    TEXT NOT NULL DEFAULT 'external' CHECK (workspace_key IN ('internal','external')),
   status           TEXT NOT NULL DEFAULT 'idle'
                    CHECK (status IN ('idle','queued','running','partial_success','completed','failed','cancelled')),
   total_items      INT NOT NULL DEFAULT 0,
@@ -235,14 +251,15 @@ CREATE TABLE IF NOT EXISTS public.jobs (
 
 ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can CRUD their own jobs" ON public.jobs;
 CREATE POLICY "Users can CRUD their own jobs"
 ON public.jobs FOR ALL
 USING (auth.uid() = user_id)
 WITH CHECK (auth.uid() = user_id);
 
-CREATE INDEX idx_jobs_user_id ON public.jobs(user_id);
-CREATE INDEX idx_jobs_status ON public.jobs(user_id, status);
-CREATE INDEX idx_jobs_created_at ON public.jobs(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_user_id ON public.jobs(user_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON public.jobs(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON public.jobs(user_id, created_at DESC);
 
 -- ---------------------------------------------------------------------------
 -- 7. Job Snapshots (freeze config at run time)
@@ -260,6 +277,7 @@ CREATE TABLE IF NOT EXISTS public.job_snapshots (
 
 ALTER TABLE public.job_snapshots ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can access snapshots of their own jobs" ON public.job_snapshots;
 CREATE POLICY "Users can access snapshots of their own jobs"
 ON public.job_snapshots FOR ALL
 USING (
@@ -277,7 +295,7 @@ WITH CHECK (
   )
 );
 
-CREATE INDEX idx_job_snapshots_job_id ON public.job_snapshots(job_id);
+CREATE INDEX IF NOT EXISTS idx_job_snapshots_job_id ON public.job_snapshots(job_id);
 
 -- ---------------------------------------------------------------------------
 -- 8. Job Items
@@ -302,6 +320,7 @@ CREATE TABLE IF NOT EXISTS public.job_items (
 
 ALTER TABLE public.job_items ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can access items of their own jobs" ON public.job_items;
 CREATE POLICY "Users can access items of their own jobs"
 ON public.job_items FOR ALL
 USING (
@@ -319,10 +338,10 @@ WITH CHECK (
   )
 );
 
-CREATE INDEX idx_job_items_job_id ON public.job_items(job_id);
-CREATE INDEX idx_job_items_snapshot_id ON public.job_items(snapshot_id);
-CREATE INDEX idx_job_items_status ON public.job_items(job_id, status);
-CREATE INDEX idx_job_items_batch_key ON public.job_items(gemini_batch_request_key)
+CREATE INDEX IF NOT EXISTS idx_job_items_job_id ON public.job_items(job_id);
+CREATE INDEX IF NOT EXISTS idx_job_items_snapshot_id ON public.job_items(snapshot_id);
+CREATE INDEX IF NOT EXISTS idx_job_items_status ON public.job_items(job_id, status);
+CREATE INDEX IF NOT EXISTS idx_job_items_batch_key ON public.job_items(gemini_batch_request_key)
   WHERE gemini_batch_request_key IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
@@ -333,6 +352,7 @@ CREATE TABLE IF NOT EXISTS public.outputs (
   job_id              UUID NOT NULL REFERENCES public.jobs(id) ON DELETE CASCADE,
   job_item_id         UUID NOT NULL REFERENCES public.job_items(id) ON DELETE CASCADE,
   user_id             UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  workspace_key       TEXT NOT NULL DEFAULT 'external' CHECK (workspace_key IN ('internal','external')),
   category_id         UUID,
   category_slug       TEXT NOT NULL,
   image_display_name  TEXT NOT NULL,
@@ -345,16 +365,17 @@ CREATE TABLE IF NOT EXISTS public.outputs (
 
 ALTER TABLE public.outputs ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can CRUD their own outputs" ON public.outputs;
 CREATE POLICY "Users can CRUD their own outputs"
 ON public.outputs FOR ALL
 USING (auth.uid() = user_id)
 WITH CHECK (auth.uid() = user_id);
 
-CREATE INDEX idx_outputs_user_id ON public.outputs(user_id);
-CREATE INDEX idx_outputs_job_id ON public.outputs(job_id);
-CREATE INDEX idx_outputs_job_item_id ON public.outputs(job_item_id);
-CREATE INDEX idx_outputs_category ON public.outputs(user_id, category_slug);
-CREATE INDEX idx_outputs_created_at ON public.outputs(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_outputs_user_id ON public.outputs(user_id);
+CREATE INDEX IF NOT EXISTS idx_outputs_job_id ON public.outputs(job_id);
+CREATE INDEX IF NOT EXISTS idx_outputs_job_item_id ON public.outputs(job_item_id);
+CREATE INDEX IF NOT EXISTS idx_outputs_category ON public.outputs(user_id, category_slug);
+CREATE INDEX IF NOT EXISTS idx_outputs_created_at ON public.outputs(user_id, created_at DESC);
 
 -- ---------------------------------------------------------------------------
 -- 10. System Settings (per-user)
@@ -371,12 +392,91 @@ CREATE TABLE IF NOT EXISTS public.system_settings (
 
 ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can CRUD their own settings" ON public.system_settings;
 CREATE POLICY "Users can CRUD their own settings"
 ON public.system_settings FOR ALL
 USING (auth.uid() = user_id)
 WITH CHECK (auth.uid() = user_id);
 
-CREATE INDEX idx_system_settings_user_id ON public.system_settings(user_id);
+CREATE INDEX IF NOT EXISTS idx_system_settings_user_id ON public.system_settings(user_id);
+
+-- Workspace sharing migration for existing installs.
+ALTER TABLE public.categories
+ADD COLUMN IF NOT EXISTS workspace_key TEXT NOT NULL DEFAULT 'external'
+CHECK (workspace_key IN ('internal','external'));
+
+ALTER TABLE public.jobs
+ADD COLUMN IF NOT EXISTS workspace_key TEXT NOT NULL DEFAULT 'external'
+CHECK (workspace_key IN ('internal','external'));
+
+ALTER TABLE public.outputs
+ADD COLUMN IF NOT EXISTS workspace_key TEXT NOT NULL DEFAULT 'external'
+CHECK (workspace_key IN ('internal','external'));
+
+UPDATE public.categories
+SET workspace_key = 'internal'
+WHERE user_id IN (
+  SELECT p.id
+  FROM public.profiles p
+  LEFT JOIN public.builtin_key_authorizations a ON a.email = lower(trim(p.email))
+  WHERE lower(trim(p.email)) IN ('links358p@gmail.com') OR a.active = true
+);
+
+UPDATE public.jobs
+SET workspace_key = 'internal'
+WHERE user_id IN (
+  SELECT p.id
+  FROM public.profiles p
+  LEFT JOIN public.builtin_key_authorizations a ON a.email = lower(trim(p.email))
+  WHERE lower(trim(p.email)) IN ('links358p@gmail.com') OR a.active = true
+);
+
+UPDATE public.outputs
+SET workspace_key = 'internal'
+WHERE user_id IN (
+  SELECT p.id
+  FROM public.profiles p
+  LEFT JOIN public.builtin_key_authorizations a ON a.email = lower(trim(p.email))
+  WHERE lower(trim(p.email)) IN ('links358p@gmail.com') OR a.active = true
+);
+
+ALTER TABLE public.categories
+DROP CONSTRAINT IF EXISTS categories_user_id_slug_key;
+
+ALTER TABLE public.categories
+DROP CONSTRAINT IF EXISTS categories_slug_key;
+
+ALTER TABLE public.categories
+DROP CONSTRAINT IF EXISTS categories_workspace_key_slug_key;
+
+WITH ranked_category_slugs AS (
+  SELECT
+    id,
+    slug,
+    ROW_NUMBER() OVER (
+      PARTITION BY workspace_key, slug
+      ORDER BY created_at NULLS FIRST, id
+    ) AS rn
+  FROM public.categories
+  WHERE slug IS NOT NULL AND btrim(slug) <> ''
+)
+UPDATE public.categories c
+SET slug = c.slug || '-migrated-' || ranked_category_slugs.rn
+FROM ranked_category_slugs
+WHERE c.id = ranked_category_slugs.id
+  AND ranked_category_slugs.rn > 1;
+
+ALTER TABLE public.categories
+ADD CONSTRAINT categories_workspace_key_slug_key UNIQUE (workspace_key, slug);
+
+CREATE INDEX IF NOT EXISTS idx_categories_workspace_sort
+ON public.categories(workspace_key, sort_order);
+
+CREATE INDEX IF NOT EXISTS idx_jobs_workspace_created
+ON public.jobs(workspace_key, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_outputs_workspace_created
+ON public.outputs(workspace_key, created_at DESC);
 
 -- ---------------------------------------------------------------------------
 -- 11. Built-in Gemini API Authorization List

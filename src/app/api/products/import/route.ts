@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
-import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
 import { PRODUCT_LANGUAGES } from '@/lib/types'
+import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 
 const FIELD_ALIASES: Record<string, string[]> = {
   sku: ['sku', '商品sku', '商品编码', '货号', '商品货号', 'itemsku', 'itemcode'],
@@ -70,9 +70,9 @@ function parseCopyCount(value: string) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
   const { data: categories, error: categoryError } = await supabase
     .from('categories')
     .select('id,name_zh,slug')
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
 
   if (categoryError) {
     return NextResponse.json({ error: categoryError.message }, { status: 500 })
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
   const { data: existingColumns, error: columnsError } = await supabase
     .from('product_attribute_columns')
     .select('*')
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
     .order('sort_order', { ascending: true })
 
   if (columnsError) {
@@ -145,6 +145,7 @@ export async function POST(request: NextRequest) {
       .from('product_attribute_columns')
       .insert(missingColumns.map((name, index) => ({
         user_id: user.id,
+        workspace_key: workspaceKey,
         name,
         sort_order: maxSort + index + 1,
       })))
@@ -175,6 +176,7 @@ export async function POST(request: NextRequest) {
 
     return {
       user_id: user.id,
+      workspace_key: workspaceKey,
       category_id: categoryId,
       sku,
       source_title: getCell(row, FIELD_ALIASES.source_title),
@@ -201,14 +203,14 @@ export async function POST(request: NextRequest) {
   const { data: existingProducts } = await supabase
     .from('products')
     .select('sku')
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
     .in('sku', validProducts.map((product) => product.sku))
 
   const existingSkuSet = new Set((existingProducts || []).map((product) => product.sku))
 
   const { error: upsertError } = await supabase
     .from('products')
-    .upsert(validProducts, { onConflict: 'user_id,sku' })
+    .upsert(validProducts, { onConflict: 'workspace_key,sku' })
 
   if (upsertError) {
     return NextResponse.json({ error: upsertError.message, warnings }, { status: 500 })

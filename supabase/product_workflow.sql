@@ -7,15 +7,17 @@
 CREATE TABLE IF NOT EXISTS public.product_attribute_columns (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id     UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  workspace_key TEXT NOT NULL DEFAULT 'external' CHECK (workspace_key IN ('internal','external')),
   name        TEXT NOT NULL,
   sort_order  INT NOT NULL DEFAULT 0,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (user_id, name)
+  UNIQUE (workspace_key, name)
 );
 
 ALTER TABLE public.product_attribute_columns ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can CRUD their own product attribute columns" ON public.product_attribute_columns;
 CREATE POLICY "Users can CRUD their own product attribute columns"
 ON public.product_attribute_columns FOR ALL
 USING (auth.uid() = user_id)
@@ -28,6 +30,7 @@ ON public.product_attribute_columns(user_id, sort_order);
 CREATE TABLE IF NOT EXISTS public.products (
   id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id             UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  workspace_key       TEXT NOT NULL DEFAULT 'external' CHECK (workspace_key IN ('internal','external')),
   category_id         UUID REFERENCES public.categories(id) ON DELETE SET NULL,
   sku                 TEXT NOT NULL,
   source_title        TEXT NOT NULL DEFAULT '',
@@ -41,11 +44,12 @@ CREATE TABLE IF NOT EXISTS public.products (
   error_message       TEXT,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (user_id, sku)
+  UNIQUE (workspace_key, sku)
 );
 
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can CRUD their own products" ON public.products;
 CREATE POLICY "Users can CRUD their own products"
 ON public.products FOR ALL
 USING (auth.uid() = user_id)
@@ -70,6 +74,7 @@ CREATE TABLE IF NOT EXISTS public.product_images (
 
 ALTER TABLE public.product_images ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can CRUD images for their own products" ON public.product_images;
 CREATE POLICY "Users can CRUD images for their own products"
 ON public.product_images FOR ALL
 USING (
@@ -94,6 +99,7 @@ ON public.product_images(product_id, sort_order);
 CREATE TABLE IF NOT EXISTS public.rule_templates (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id     UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  workspace_key TEXT NOT NULL DEFAULT 'external' CHECK (workspace_key IN ('internal','external')),
   name        TEXT NOT NULL,
   scope       TEXT NOT NULL DEFAULT 'general'
               CHECK (scope IN ('general','title_description','image','platform')),
@@ -101,11 +107,12 @@ CREATE TABLE IF NOT EXISTS public.rule_templates (
   active      BOOLEAN NOT NULL DEFAULT true,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (user_id, name)
+  UNIQUE (workspace_key, name)
 );
 
 ALTER TABLE public.rule_templates ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can CRUD their own rule templates" ON public.rule_templates;
 CREATE POLICY "Users can CRUD their own rule templates"
 ON public.rule_templates FOR ALL
 USING (auth.uid() = user_id)
@@ -119,12 +126,14 @@ CREATE TABLE IF NOT EXISTS public.product_copies (
   id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   product_id              UUID NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
   user_id                 UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  workspace_key           TEXT NOT NULL DEFAULT 'external' CHECK (workspace_key IN ('internal','external')),
   sku                     TEXT NOT NULL,
   copy_index              INT NOT NULL,
   language_code           TEXT NOT NULL,
   language_label          TEXT NOT NULL,
   generated_title         TEXT NOT NULL DEFAULT '',
   generated_description   TEXT NOT NULL DEFAULT '',
+  staff_note              TEXT NOT NULL DEFAULT '',
   status                  TEXT NOT NULL DEFAULT 'queued'
                           CHECK (status IN ('queued','generating','completed','failed','needs_review')),
   error_message           TEXT,
@@ -135,6 +144,7 @@ CREATE TABLE IF NOT EXISTS public.product_copies (
 
 ALTER TABLE public.product_copies ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can CRUD their own product copies" ON public.product_copies;
 CREATE POLICY "Users can CRUD their own product copies"
 ON public.product_copies FOR ALL
 USING (auth.uid() = user_id)
@@ -145,6 +155,155 @@ ON public.product_copies(user_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_product_copies_product
 ON public.product_copies(product_id);
+
+ALTER TABLE public.product_copies
+ADD COLUMN IF NOT EXISTS staff_note TEXT NOT NULL DEFAULT '';
+
+-- 5b. Workspace sharing migration.
+ALTER TABLE public.product_attribute_columns
+ADD COLUMN IF NOT EXISTS workspace_key TEXT NOT NULL DEFAULT 'external'
+CHECK (workspace_key IN ('internal','external'));
+
+ALTER TABLE public.products
+ADD COLUMN IF NOT EXISTS workspace_key TEXT NOT NULL DEFAULT 'external'
+CHECK (workspace_key IN ('internal','external'));
+
+ALTER TABLE public.rule_templates
+ADD COLUMN IF NOT EXISTS workspace_key TEXT NOT NULL DEFAULT 'external'
+CHECK (workspace_key IN ('internal','external'));
+
+ALTER TABLE public.product_copies
+ADD COLUMN IF NOT EXISTS workspace_key TEXT NOT NULL DEFAULT 'external'
+CHECK (workspace_key IN ('internal','external'));
+
+UPDATE public.product_attribute_columns
+SET workspace_key = 'internal'
+WHERE user_id IN (
+  SELECT p.id
+  FROM public.profiles p
+  LEFT JOIN public.builtin_key_authorizations a ON a.email = lower(trim(p.email))
+  WHERE lower(trim(p.email)) IN ('links358p@gmail.com') OR a.active = true
+);
+
+UPDATE public.products
+SET workspace_key = 'internal'
+WHERE user_id IN (
+  SELECT p.id
+  FROM public.profiles p
+  LEFT JOIN public.builtin_key_authorizations a ON a.email = lower(trim(p.email))
+  WHERE lower(trim(p.email)) IN ('links358p@gmail.com') OR a.active = true
+);
+
+UPDATE public.rule_templates
+SET workspace_key = 'internal'
+WHERE user_id IN (
+  SELECT p.id
+  FROM public.profiles p
+  LEFT JOIN public.builtin_key_authorizations a ON a.email = lower(trim(p.email))
+  WHERE lower(trim(p.email)) IN ('links358p@gmail.com') OR a.active = true
+);
+
+UPDATE public.product_copies
+SET workspace_key = 'internal'
+WHERE user_id IN (
+  SELECT p.id
+  FROM public.profiles p
+  LEFT JOIN public.builtin_key_authorizations a ON a.email = lower(trim(p.email))
+  WHERE lower(trim(p.email)) IN ('links358p@gmail.com') OR a.active = true
+);
+
+ALTER TABLE public.product_attribute_columns
+DROP CONSTRAINT IF EXISTS product_attribute_columns_user_id_name_key;
+
+ALTER TABLE public.product_attribute_columns
+DROP CONSTRAINT IF EXISTS product_attribute_columns_workspace_key_name_key;
+
+WITH ranked_attribute_names AS (
+  SELECT
+    id,
+    name,
+    ROW_NUMBER() OVER (
+      PARTITION BY workspace_key, name
+      ORDER BY created_at NULLS FIRST, id
+    ) AS rn
+  FROM public.product_attribute_columns
+  WHERE name IS NOT NULL AND btrim(name) <> ''
+)
+UPDATE public.product_attribute_columns pac
+SET name = pac.name || ' [migrated ' || ranked_attribute_names.rn || ']'
+FROM ranked_attribute_names
+WHERE pac.id = ranked_attribute_names.id
+  AND ranked_attribute_names.rn > 1;
+
+ALTER TABLE public.product_attribute_columns
+ADD CONSTRAINT product_attribute_columns_workspace_key_name_key UNIQUE (workspace_key, name);
+
+ALTER TABLE public.products
+DROP CONSTRAINT IF EXISTS products_user_id_sku_key;
+
+ALTER TABLE public.products
+DROP CONSTRAINT IF EXISTS products_workspace_key_sku_key;
+
+WITH ranked_product_skus AS (
+  SELECT
+    id,
+    sku,
+    ROW_NUMBER() OVER (
+      PARTITION BY workspace_key, sku
+      ORDER BY created_at NULLS FIRST, id
+    ) AS rn
+  FROM public.products
+  WHERE sku IS NOT NULL AND btrim(sku) <> ''
+)
+UPDATE public.products p
+SET sku = p.sku || '-M' || ranked_product_skus.rn
+FROM ranked_product_skus
+WHERE p.id = ranked_product_skus.id
+  AND ranked_product_skus.rn > 1;
+
+ALTER TABLE public.products
+ADD CONSTRAINT products_workspace_key_sku_key UNIQUE (workspace_key, sku);
+
+ALTER TABLE public.rule_templates
+DROP CONSTRAINT IF EXISTS rule_templates_user_id_name_key;
+
+ALTER TABLE public.rule_templates
+DROP CONSTRAINT IF EXISTS rule_templates_workspace_key_name_key;
+
+WITH ranked_rule_names AS (
+  SELECT
+    id,
+    name,
+    ROW_NUMBER() OVER (
+      PARTITION BY workspace_key, name
+      ORDER BY created_at NULLS FIRST, id
+    ) AS rn
+  FROM public.rule_templates
+  WHERE name IS NOT NULL AND btrim(name) <> ''
+)
+UPDATE public.rule_templates rt
+SET name = rt.name || ' [migrated ' || ranked_rule_names.rn || ']'
+FROM ranked_rule_names
+WHERE rt.id = ranked_rule_names.id
+  AND ranked_rule_names.rn > 1;
+
+ALTER TABLE public.rule_templates
+ADD CONSTRAINT rule_templates_workspace_key_name_key UNIQUE (workspace_key, name);
+
+CREATE INDEX IF NOT EXISTS idx_product_attribute_columns_workspace_sort
+ON public.product_attribute_columns(workspace_key, sort_order);
+
+CREATE INDEX IF NOT EXISTS idx_products_workspace_created
+ON public.products(workspace_key, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_products_workspace_category
+ON public.products(workspace_key, category_id);
+
+CREATE INDEX IF NOT EXISTS idx_rule_templates_workspace_scope
+ON public.rule_templates(workspace_key, scope, active);
+
+CREATE INDEX IF NOT EXISTS idx_product_copies_workspace_created
+ON public.product_copies(workspace_key, created_at DESC);
 
 -- 6. Generated image rows for each copy.
 CREATE TABLE IF NOT EXISTS public.product_copy_images (
@@ -165,6 +324,7 @@ CREATE TABLE IF NOT EXISTS public.product_copy_images (
 
 ALTER TABLE public.product_copy_images ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can CRUD images for their own copies" ON public.product_copy_images;
 CREATE POLICY "Users can CRUD images for their own copies"
 ON public.product_copy_images FOR ALL
 USING (
@@ -216,12 +376,22 @@ CREATE TRIGGER trg_set_updated_at_product_copy_images
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 -- 9. Seed the editable Shopee rule template from the supplied PDF summary.
-INSERT INTO public.rule_templates (user_id, name, scope, content, active)
+INSERT INTO public.rule_templates (user_id, workspace_key, name, scope, content, active)
 SELECT
   p.id,
+  CASE
+    WHEN lower(trim(p.email)) = 'links358p@gmail.com'
+      OR EXISTS (
+        SELECT 1 FROM public.builtin_key_authorizations a
+        WHERE a.email = lower(trim(p.email))
+          AND a.active = true
+      )
+    THEN 'internal'
+    ELSE 'external'
+  END,
   'Shopee title, description, and image rules',
   'platform',
   'Strictly avoid prohibited content in titles, descriptions, images, and videos. Do not mention off-platform contacts or links. Do not use misleading pricing, profanity, HTML/code, competitor platform names/logos, or unsupported claims. For beauty/personal-care, do not promote medical, drug-like, disease treatment, disease prevention, whitening, anti-allergy, hair-growth, antibacterial, or exaggerated efficacy claims. Ingredients must use INCI names when included, and ingredients must not be tied to medical efficacy. Titles should follow: core keyword + long-tail keyword + attributes + usage scene, or product name/model + specification + applicable scene/user. Do not keyword-stuff, use emojis, hashtags, extreme words, competitor brands, false original/authentic claims, medical-grade terms, or incomplete compatibility wording. Descriptions should be structured as: key selling points, specifications, usage instructions/applicable users, package contents, after-sales note. Keep the meaning true to the source product. Images should be square 1024x1024 when possible, under platform size limits, non-duplicated, matching title and description, with no off-platform contact information. Prefer distinct hero, lifestyle, detail, and selling-point images.',
   true
 FROM public.profiles p
-ON CONFLICT (user_id, name) DO NOTHING;
+ON CONFLICT (workspace_key, name) DO NOTHING;

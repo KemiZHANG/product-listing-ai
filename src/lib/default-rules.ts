@@ -124,10 +124,12 @@ For the 6-image workflow: create 2 hero/main images, 2 model or usage-scene imag
 
 export async function ensureDefaultRuleTemplates(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  workspaceKey: string
 ) {
   const rows = SHOPEE_PDF_RULE_TEMPLATES.map((rule) => ({
     user_id: userId,
+    workspace_key: workspaceKey,
     name: rule.name,
     scope: rule.scope,
     content: rule.content,
@@ -136,7 +138,7 @@ export async function ensureDefaultRuleTemplates(
 
   await supabase
     .from('rule_templates')
-    .upsert(rows, { onConflict: 'user_id,name', ignoreDuplicates: true })
+    .upsert(rows, { onConflict: 'workspace_key,name', ignoreDuplicates: true })
 
   await supabase
     .from('rule_templates')
@@ -145,6 +147,6 @@ export async function ensureDefaultRuleTemplates(
       content: SHOPEE_PDF_RULE_TEMPLATES[0].content,
       active: true,
     })
-    .eq('user_id', userId)
+    .eq('workspace_key', workspaceKey)
     .eq('name', 'Shopee title, description, and image rules')
 }

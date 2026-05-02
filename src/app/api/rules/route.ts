@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
 import { ensureDefaultRuleTemplates } from '@/lib/default-rules'
 import { isSeoKeywordRule } from '@/lib/seo-keywords'
+import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 
 export async function GET(request: NextRequest) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   try {
-    await ensureDefaultRuleTemplates(supabase, user.id)
+    await ensureDefaultRuleTemplates(supabase, user.id, workspaceKey)
   } catch {
     // Rules are still editable if seeding fails; surface database errors from the main query below.
   }
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase
     .from('rule_templates')
     .select('*')
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
     .order('created_at', { ascending: true })
 
   if (error) {
@@ -30,9 +30,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
     .from('rule_templates')
     .insert({
       user_id: user.id,
+      workspace_key: workspaceKey,
       name,
       content,
       scope,

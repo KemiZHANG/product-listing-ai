@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
 import { defaultDetailPrompt } from '@/lib/product-generation'
+import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 
 export async function POST(request: NextRequest) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const { data: categories, error } = await supabase
     .from('categories')
     .select('id, name_zh')
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })

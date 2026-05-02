@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSupabase } from '@/lib/supabase'
 import { ensurePresetCategoriesForUser } from '@/lib/preset-seed'
+import { getWorkspaceKeyForEmail } from '@/lib/workspace'
 import { isAllowedAppEmail } from '@/lib/access-control'
 
 export async function POST(request: NextRequest) {
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (data.user) {
-    await ensurePresetCategoriesForUser(supabase, data.user.id)
+    await ensurePresetCategoriesForUser(supabase, data.user.id, await getWorkspaceKeyForEmail(data.user.email))
   }
 
   return NextResponse.json({ user: data.user }, { status: 201 })

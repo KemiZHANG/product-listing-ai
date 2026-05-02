@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
+import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 
 function normalizeLanguages(value: unknown) {
   if (!Array.isArray(value)) return ['en']
@@ -20,9 +20,9 @@ function countCopiesByProduct(copies: Array<{ product_id: string }>) {
 }
 
 export async function GET(request: NextRequest) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
       categories(id,name_zh,slug,icon),
       images:product_images(*)
     `)
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
     .order('created_at', { ascending: false })
     .limit(limit)
 
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     const { data: copies } = await supabase
       .from('product_copies')
       .select('product_id')
-      .eq('user_id', user.id)
+      .eq('workspace_key', workspaceKey)
       .in('product_id', productIds)
     copyCounts = countCopiesByProduct(copies || [])
   }
@@ -75,9 +75,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
       .from('categories')
       .select('id')
       .eq('id', categoryId)
-      .eq('user_id', user.id)
+      .eq('workspace_key', workspaceKey)
       .maybeSingle()
 
     if (!category) {
@@ -105,6 +105,7 @@ export async function POST(request: NextRequest) {
     .from('products')
     .insert({
       user_id: user.id,
+      workspace_key: workspaceKey,
       category_id: categoryId,
       sku,
       source_title: String(body.source_title || ''),

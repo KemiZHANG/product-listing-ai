@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
+import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 
 function normalizeLanguages(value: unknown) {
   if (!Array.isArray(value)) return ['en']
@@ -16,9 +16,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -31,7 +31,7 @@ export async function GET(
       images:product_images(*)
     `)
     .eq('id', id)
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
     .maybeSingle()
 
   if (error) {
@@ -48,9 +48,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -61,7 +61,7 @@ export async function PUT(
     .from('products')
     .select('id')
     .eq('id', id)
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
     .maybeSingle()
 
   if (!existing) {
@@ -74,7 +74,7 @@ export async function PUT(
       .from('categories')
       .select('id')
       .eq('id', categoryId)
-      .eq('user_id', user.id)
+      .eq('workspace_key', workspaceKey)
       .maybeSingle()
 
     if (!category) {
@@ -97,7 +97,7 @@ export async function PUT(
       error_message: null,
     })
     .eq('id', id)
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
     .select(`
       *,
       categories(id,name_zh,slug,icon),
@@ -116,24 +116,24 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const { id } = await params
   const { data: images } = await supabase
     .from('product_images')
-    .select('storage_path, products!inner(user_id)')
+    .select('storage_path, products!inner(workspace_key)')
     .eq('product_id', id)
-    .eq('products.user_id', user.id)
+    .eq('products.workspace_key', workspaceKey)
 
   const { error } = await supabase
     .from('products')
     .delete()
     .eq('id', id)
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })

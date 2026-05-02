@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
 import { cancelGeminiBatch, decodeBatchMeta } from '@/lib/gemini-batch'
 import { parseStoredGeminiSettings, readBuiltinGeminiApiKey } from '@/lib/gemini-settings'
 import { cancelOpenAIBatch, decodeOpenAIBatchMeta, isValidOpenAIApiKey, readOpenAIImageApiKey } from '@/lib/openai-image'
+import { getRequestSupabase } from '@/lib/supabase'
+import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 
 async function getGeminiApiKey(supabase: ReturnType<typeof getRequestSupabase>, userId: string) {
   const { data: settings } = await supabase
@@ -24,9 +25,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -36,7 +37,7 @@ export async function GET(
     .from('jobs')
     .select('*')
     .eq('id', id)
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
     .single()
 
   if (error || !job) {
@@ -67,9 +68,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -80,7 +81,7 @@ export async function DELETE(
     .from('jobs')
     .select('*')
     .eq('id', id)
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
     .maybeSingle()
 
   if (!job) {

@@ -197,6 +197,7 @@ export interface ProductCopy {
   language_label: string
   generated_title: string
   generated_description: string
+  staff_note?: string | null
   status: 'queued' | 'generating' | 'completed' | 'failed' | 'needs_review'
   error_message: string | null
   created_at: string

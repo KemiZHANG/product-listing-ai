@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
+import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 
 export async function GET(request: NextRequest) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const { data, error } = await supabase
     .from('product_attribute_columns')
     .select('*')
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
     .order('sort_order', { ascending: true })
 
   if (error) {
@@ -22,9 +22,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
   const { data: maxSort } = await supabase
     .from('product_attribute_columns')
     .select('sort_order')
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
     .order('sort_order', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
     .from('product_attribute_columns')
     .insert({
       user_id: user.id,
+      workspace_key: workspaceKey,
       name,
       sort_order: (maxSort?.sort_order ?? -1) + 1,
     })

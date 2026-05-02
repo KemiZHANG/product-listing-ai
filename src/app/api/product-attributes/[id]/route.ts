@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
+import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
-  if (authError || !user) {
+  const supabase = getWorkspaceSupabase()
+  const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
+  if (authError || !user || !workspaceKey) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -16,7 +16,7 @@ export async function DELETE(
     .from('product_attribute_columns')
     .select('id, name')
     .eq('id', id)
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
     .maybeSingle()
 
   if (!column) {
@@ -27,7 +27,7 @@ export async function DELETE(
     .from('product_attribute_columns')
     .delete()
     .eq('id', id)
-    .eq('user_id', user.id)
+    .eq('workspace_key', workspaceKey)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })

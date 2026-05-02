@@ -81,15 +81,20 @@ export default function SeoKeywordsPage() {
 
       setCategories(categoriesData || [])
       setBanks(banksData || [])
-      if (!categoryId && categoriesData?.[0]?.id) setCategoryId(categoriesData[0].id)
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败')
     }
-  }, [categoryId])
+  }, [])
 
   useEffect(() => {
     if (!loading) fetchData()
   }, [loading, fetchData])
+
+  useEffect(() => {
+    if (!categoryId && categories.length > 0) {
+      setCategoryId(categories[0].id)
+    }
+  }, [categories, categoryId])
 
   const currentBank = useMemo(() => {
     return banks.find((bank) => bank.category_id === categoryId && bank.language_code === languageCode) || null
@@ -162,6 +167,7 @@ export default function SeoKeywordsPage() {
           category_id: categoryId,
           language_code: languageCode,
           keywords,
+          mode: 'replace',
           active: true,
         }),
       })

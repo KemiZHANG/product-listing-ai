@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { isAllowedAppEmail } from '@/lib/access-control'
 
 type Mode = 'login' | 'register'
 
@@ -39,15 +38,11 @@ export default function LoginPage() {
 
     try {
       if (mode === 'login') {
-        const { data, error: err } = await supabase.auth.signInWithPassword({
+        const { error: err } = await supabase.auth.signInWithPassword({
           email,
           password,
         })
         if (err) throw err
-        if (!isAllowedAppEmail(data.user?.email)) {
-          await supabase.auth.signOut()
-          throw new Error('当前网站还在内测优化中，暂时只允许 links358p@gmail.com 登录。')
-        }
       } else {
         const registerRes = await fetch('/api/auth/register', {
           method: 'POST',
@@ -178,8 +173,8 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-sm font-medium text-red-600">
-            当前网站还在内测优化中，暂时只允许 links358p@gmail.com 登录。
+          <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm font-medium text-amber-700">
+            未授权邮箱可以管理商品、Prompt 和 SEO 数据；AI 生成功能需要授权邮箱、验证内置 API 密码，或配置自己的 API Key。
           </div>
         </div>
       </div>
