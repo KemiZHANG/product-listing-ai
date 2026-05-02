@@ -45,9 +45,30 @@ function createKeyword(draft: KeywordDraft): SeoKeyword {
   }
 }
 
+function categoriesFromBanks(banks: SeoKeywordBankWithCategory[]) {
+  return Array.from(
+    banks.reduce((map, bank) => {
+      if (!bank.category_id || map.has(bank.category_id)) return map
+      map.set(bank.category_id, {
+        id: bank.category_id,
+        user_id: '',
+        name_zh: bank.category_name_zh || bank.category_id,
+        slug: bank.category_slug || bank.category_id,
+        icon: bank.category_icon || '📦',
+        sort_order: map.size,
+        is_preset: true,
+        created_at: '',
+        updated_at: '',
+      })
+      return map
+    }, new Map<string, Category>()).values()
+  )
+}
+
 export default function SeoKeywordsPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
+  const [dataLoading, setDataLoading] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
   const [banks, setBanks] = useState<SeoKeywordBank[]>([])
   const [categoryId, setCategoryId] = useState('')
@@ -70,49 +91,49 @@ export default function SeoKeywordsPage() {
     })
   }, [router])
 
+  const applyCategories = useCallback((loadedCategories: Category[]) => {
+    setCategories(loadedCategories)
+    setCategoryId((current) => current || loadedCategories[0]?.id || '')
+  }, [])
+
   const fetchData = useCallback(async () => {
     setError(null)
+    setDataLoading(true)
     try {
-      const [categoriesRes, banksRes] = await Promise.all([
-        apiFetch('/api/categories'),
-        apiFetch('/api/seo-keywords'),
-      ])
-      const [categoriesData, banksData] = await Promise.all([
-        categoriesRes.json().catch(() => null),
-        banksRes.json().catch(() => null),
-      ])
+      let hasCategories = false
+      const banksPromise = apiFetch('/api/seo-keywords')
+      const categoriesRes = await apiFetch('/api/categories')
+      const categoriesData = await categoriesRes.json().catch(() => null)
 
-      if (!categoriesRes.ok) throw new Error(categoriesData?.error || '类目加载失败')
-      if (!banksRes.ok) throw new Error(banksData?.error || '关键词库加载失败')
+      if (categoriesRes.ok && Array.isArray(categoriesData)) {
+        hasCategories = categoriesData.length > 0
+        applyCategories(categoriesData)
+      } else {
+        setError(categoriesData?.error || `类目加载失败 (${categoriesRes.status})`)
+      }
+
+      const banksRes = await banksPromise
+      const banksData = await banksRes.json().catch(() => null)
+
+      if (!banksRes.ok) {
+        setError((previous) => previous || banksData?.error || `关键词库加载失败 (${banksRes.status})`)
+        return
+      }
 
       const loadedBanks: SeoKeywordBankWithCategory[] = Array.isArray(banksData) ? banksData : []
-      const loadedCategories: Category[] = Array.isArray(categoriesData) && categoriesData.length > 0
-        ? categoriesData
-        : Array.from(
-            loadedBanks.reduce((map, bank) => {
-              if (!bank.category_id || map.has(bank.category_id)) return map
-              map.set(bank.category_id, {
-                id: bank.category_id,
-                user_id: '',
-                name_zh: bank.category_name_zh || bank.category_id,
-                slug: bank.category_slug || bank.category_id,
-                icon: bank.category_icon || '📦',
-                sort_order: map.size,
-                is_preset: true,
-                created_at: '',
-                updated_at: '',
-              })
-              return map
-            }, new Map<string, Category>()).values()
-          )
-
-      setCategories(loadedCategories)
       setBanks(loadedBanks)
-      setCategoryId((current) => current || loadedCategories[0]?.id || '')
+      if (!hasCategories) {
+        const fallbackCategories = categoriesFromBanks(loadedBanks)
+        if (fallbackCategories.length > 0) {
+          applyCategories(fallbackCategories)
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败')
+    } finally {
+      setDataLoading(false)
     }
-  }, [])
+  }, [applyCategories])
 
   useEffect(() => {
     if (!loading) fetchData()
@@ -155,7 +176,7 @@ export default function SeoKeywordsPage() {
 
   const importBulk = () => {
     const parsed = bulkText
-      .split(/[\n,，]/)
+      .split(/[\n,，]+/)
       .map((item) => item.trim())
       .filter(Boolean)
       .map((keyword) => ({
@@ -294,7 +315,8 @@ export default function SeoKeywordsPage() {
           <label className="block">
             <span className="mb-2 block text-sm font-semibold text-slate-700">类目</span>
             <select value={effectiveCategoryId} onChange={(event) => setCategoryId(event.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50">
-              {categories.length === 0 && <option value="">没有可用类目，请刷新或检查登录状态</option>}
+              {dataLoading && categories.length === 0 && <option value="">正在加载类目...</option>}
+              {!dataLoading && categories.length === 0 && <option value="">没有可用类目，请刷新或检查登录状态</option>}
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>{category.icon} {category.name_zh}</option>
               ))}

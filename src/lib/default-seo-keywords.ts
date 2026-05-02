@@ -3,7 +3,6 @@ import { PRODUCT_LANGUAGES, type Category } from './types'
 import {
   buildSeoKeywordRuleName,
   normalizeSeoKeywords,
-  parseSeoKeywordBank,
   serializeSeoKeywordBank,
   type SeoKeyword,
   type SeoKeywordType,
@@ -134,49 +133,38 @@ export async function ensureDefaultSeoKeywordBanks(
 
   if (!categories?.length) return
 
-  for (const category of uniqueCategories(categories as CategoryLike[])) {
-    for (const language of PRODUCT_LANGUAGES) {
-      const name = buildSeoKeywordRuleName(category.id, language.code)
-      const { data: existing } = await supabase
-        .from('rule_templates')
-        .select('id,content')
-        .eq('workspace_key', workspaceKey)
-        .eq('name', name)
-        .maybeSingle()
+  const categoryList = uniqueCategories(categories as CategoryLike[])
+  const expected = categoryList.flatMap((category) => PRODUCT_LANGUAGES.map((language) => ({
+    category,
+    language,
+    name: buildSeoKeywordRuleName(category.id, language.code),
+  })))
 
-      const defaults = buildDefaultSeoKeywords(category, language.code)
-      if (existing?.id) {
-        const current = parseSeoKeywordBank(existing.content)?.keywords || []
-        const keywords = mergeSeoKeywords(defaults, current)
-        await supabase
-          .from('rule_templates')
-          .update({
-            content: serializeSeoKeywordBank({
-              category_id: category.id,
-              language_code: language.code,
-              keywords,
-            }),
-            active: true,
-          })
-          .eq('id', existing.id)
-          .eq('workspace_key', workspaceKey)
-        continue
-      }
+  const { data: existingRules } = await supabase
+    .from('rule_templates')
+    .select('name')
+    .eq('workspace_key', workspaceKey)
+    .like('name', 'SEO Keywords::%')
 
-      await supabase
-        .from('rule_templates')
-        .insert({
-          user_id: userId,
-          workspace_key: workspaceKey,
-          name,
-          scope: 'title_description',
-          content: serializeSeoKeywordBank({
-            category_id: category.id,
-            language_code: language.code,
-            keywords: defaults,
-          }),
-          active: true,
-        })
-    }
+  const existingNames = new Set((existingRules || []).map((rule) => rule.name))
+  const missingRows = expected
+    .filter((item) => !existingNames.has(item.name))
+    .map((item) => ({
+      user_id: userId,
+      workspace_key: workspaceKey,
+      name: item.name,
+      scope: 'title_description',
+      content: serializeSeoKeywordBank({
+        category_id: item.category.id,
+        language_code: item.language.code,
+        keywords: buildDefaultSeoKeywords(item.category, item.language.code),
+      }),
+      active: true,
+    }))
+
+  if (missingRows.length > 0) {
+    await supabase
+      .from('rule_templates')
+      .insert(missingRows)
   }
 }
