@@ -1,6 +1,5 @@
 import type { NextRequest } from 'next/server'
 import { isAdminEmail } from './admin'
-import { isAllowedAppEmail } from './access-control'
 import { isBuiltinKeyEmailAuthorized } from './builtin-key-access'
 import { getAuthenticatedUser, getServerSupabase } from './supabase'
 
@@ -20,10 +19,6 @@ export async function getWorkspaceContext(request: NextRequest) {
   const { user, error } = await getAuthenticatedUser(request)
   if (error || !user) {
     return { user: null, workspaceKey: null, error: error || 'Unauthorized' }
-  }
-
-  if (!isAllowedAppEmail(user.email)) {
-    return { user: null, workspaceKey: null, error: 'Email is not allowed for this app' }
   }
 
   return {
