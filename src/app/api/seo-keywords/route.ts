@@ -9,6 +9,9 @@ import {
 import { ensureDefaultSeoKeywordBanks, mergeSeoKeywords } from '@/lib/default-seo-keywords'
 import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 type RuleTemplateRow = {
   id: string
   name: string

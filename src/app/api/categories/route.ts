@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 import { defaultDetailPrompt } from '@/lib/product-generation'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 type EnrichedCategory = {
   id: string
   name_zh: string

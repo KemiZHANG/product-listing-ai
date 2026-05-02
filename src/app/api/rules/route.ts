@@ -3,6 +3,9 @@ import { ensureDefaultRuleTemplates } from '@/lib/default-rules'
 import { isSeoKeywordRule } from '@/lib/seo-keywords'
 import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export async function GET(request: NextRequest) {
   const supabase = getWorkspaceSupabase()
   const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
