@@ -15,6 +15,12 @@ import {
 } from '@/lib/seo-keywords'
 import type { Category } from '@/lib/types'
 
+type SeoKeywordBankWithCategory = SeoKeywordBank & {
+  category_name_zh?: string
+  category_slug?: string
+  category_icon?: string
+}
+
 type KeywordDraft = {
   keyword: string
   type: SeoKeywordType
@@ -79,8 +85,30 @@ export default function SeoKeywordsPage() {
       if (!categoriesRes.ok) throw new Error(categoriesData?.error || '类目加载失败')
       if (!banksRes.ok) throw new Error(banksData?.error || '关键词库加载失败')
 
-      setCategories(categoriesData || [])
-      setBanks(banksData || [])
+      const loadedBanks: SeoKeywordBankWithCategory[] = Array.isArray(banksData) ? banksData : []
+      const loadedCategories: Category[] = Array.isArray(categoriesData) && categoriesData.length > 0
+        ? categoriesData
+        : Array.from(
+            loadedBanks.reduce((map, bank) => {
+              if (!bank.category_id || map.has(bank.category_id)) return map
+              map.set(bank.category_id, {
+                id: bank.category_id,
+                user_id: '',
+                name_zh: bank.category_name_zh || bank.category_id,
+                slug: bank.category_slug || bank.category_id,
+                icon: bank.category_icon || '📦',
+                sort_order: map.size,
+                is_preset: true,
+                created_at: '',
+                updated_at: '',
+              })
+              return map
+            }, new Map<string, Category>()).values()
+          )
+
+      setCategories(loadedCategories)
+      setBanks(loadedBanks)
+      setCategoryId((current) => current || loadedCategories[0]?.id || '')
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败')
     }
@@ -96,22 +124,23 @@ export default function SeoKeywordsPage() {
     }
   }, [categories, categoryId])
 
+  const effectiveCategoryId = categoryId || categories[0]?.id || ''
   const currentBank = useMemo(() => {
-    return banks.find((bank) => bank.category_id === categoryId && bank.language_code === languageCode) || null
-  }, [banks, categoryId, languageCode])
+    return banks.find((bank) => bank.category_id === effectiveCategoryId && bank.language_code === languageCode) || null
+  }, [banks, effectiveCategoryId, languageCode])
 
   useEffect(() => {
     setKeywords(currentBank?.keywords || [])
   }, [currentBank])
 
-  const currentCategory = categories.find((category) => category.id === categoryId)
+  const currentCategory = categories.find((category) => category.id === effectiveCategoryId)
   const score = useMemo(() => {
     return scoreSeoContent(previewTitle, previewDescription, {
-      category_id: categoryId,
+      category_id: effectiveCategoryId,
       language_code: languageCode,
       keywords,
     })
-  }, [categoryId, languageCode, keywords, previewTitle, previewDescription])
+  }, [effectiveCategoryId, languageCode, keywords, previewTitle, previewDescription])
 
   const groupedKeywords = SEO_KEYWORD_TYPES.map((type) => ({
     ...type,
@@ -151,7 +180,7 @@ export default function SeoKeywordsPage() {
   }
 
   const saveBank = async () => {
-    if (!categoryId) {
+    if (!effectiveCategoryId) {
       setError('请先选择类目')
       return
     }
@@ -164,7 +193,7 @@ export default function SeoKeywordsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          category_id: categoryId,
+          category_id: effectiveCategoryId,
           language_code: languageCode,
           keywords,
           mode: 'replace',
@@ -183,12 +212,12 @@ export default function SeoKeywordsPage() {
   }
 
   const deleteBank = async () => {
-    if (!categoryId || !window.confirm('确定删除当前类目和语言的关键词库吗？')) return
+    if (!effectiveCategoryId || !window.confirm('确定删除当前类目和语言的关键词库吗？')) return
     setSaving(true)
     setError(null)
     setNotice(null)
     try {
-      const res = await apiFetch(`/api/seo-keywords?category_id=${categoryId}&language_code=${languageCode}`, {
+      const res = await apiFetch(`/api/seo-keywords?category_id=${effectiveCategoryId}&language_code=${languageCode}`, {
         method: 'DELETE',
       })
       const data = await res.json().catch(() => null)
@@ -204,7 +233,7 @@ export default function SeoKeywordsPage() {
   }
 
   const suggestKeywords = async (mode: 'replace' | 'append') => {
-    if (!categoryId) {
+    if (!effectiveCategoryId) {
       setError('请先选择类目')
       return
     }
@@ -217,7 +246,7 @@ export default function SeoKeywordsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          category_id: categoryId,
+          category_id: effectiveCategoryId,
           language_code: languageCode,
           seed_text: seedText,
         }),
@@ -264,7 +293,8 @@ export default function SeoKeywordsPage() {
         <section className="mb-6 grid gap-4 rounded-[1.4rem] border border-slate-200/80 bg-white/86 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.05)] md:grid-cols-[1fr_260px_auto_auto]">
           <label className="block">
             <span className="mb-2 block text-sm font-semibold text-slate-700">类目</span>
-            <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50">
+            <select value={effectiveCategoryId} onChange={(event) => setCategoryId(event.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50">
+              {categories.length === 0 && <option value="">没有可用类目，请刷新或检查登录状态</option>}
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>{category.icon} {category.name_zh}</option>
               ))}
@@ -278,7 +308,7 @@ export default function SeoKeywordsPage() {
               ))}
             </select>
           </label>
-          <button onClick={saveBank} disabled={saving || !categoryId} className="self-end rounded-2xl bg-slate-950 px-6 py-3 text-sm font-semibold text-white shadow-xl shadow-slate-950/15 hover:bg-slate-800 disabled:bg-slate-300">
+          <button onClick={saveBank} disabled={saving || !effectiveCategoryId} className="self-end rounded-2xl bg-slate-950 px-6 py-3 text-sm font-semibold text-white shadow-xl shadow-slate-950/15 hover:bg-slate-800 disabled:bg-slate-300">
             {saving ? '保存中...' : '保存关键词库'}
           </button>
           <button onClick={deleteBank} disabled={saving || !currentBank} className="self-end rounded-2xl border border-red-200 bg-white px-5 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:border-slate-200 disabled:text-slate-300">
@@ -297,10 +327,10 @@ export default function SeoKeywordsPage() {
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
-                  <button onClick={() => suggestKeywords('replace')} disabled={suggesting || !categoryId} className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700 disabled:bg-slate-300">
+                  <button onClick={() => suggestKeywords('replace')} disabled={suggesting || !effectiveCategoryId} className="rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700 disabled:bg-slate-300">
                     {suggesting ? '生成中...' : 'AI 生成并覆盖'}
                   </button>
-                  <button onClick={() => suggestKeywords('append')} disabled={suggesting || !categoryId} className="rounded-2xl border border-blue-200 bg-white px-5 py-3 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-50 disabled:text-slate-300">
+                  <button onClick={() => suggestKeywords('append')} disabled={suggesting || !effectiveCategoryId} className="rounded-2xl border border-blue-200 bg-white px-5 py-3 text-sm font-semibold text-blue-700 shadow-sm hover:bg-blue-50 disabled:text-slate-300">
                     追加建议
                   </button>
                 </div>

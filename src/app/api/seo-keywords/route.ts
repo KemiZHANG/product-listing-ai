@@ -17,6 +17,13 @@ type RuleTemplateRow = {
   updated_at: string
 }
 
+type CategoryRow = {
+  id: string
+  name_zh: string
+  slug: string
+  icon: string
+}
+
 async function ensureCategory(
   supabase: ReturnType<typeof getWorkspaceSupabase>,
   workspaceKey: string,
@@ -49,21 +56,37 @@ export async function GET(request: NextRequest) {
     // Keep the SEO page usable even if initial seeding hits a migration race.
   }
 
-  const { data, error } = await supabase
+  const [{ data, error }, { data: categoriesData }] = await Promise.all([
+    supabase
     .from('rule_templates')
     .select('id,name,content,active,updated_at')
     .eq('workspace_key', workspaceKey)
     .like('name', `${SEO_KEYWORD_RULE_PREFIX}%`)
-    .order('updated_at', { ascending: false })
+      .order('updated_at', { ascending: false }),
+    supabase
+      .from('categories')
+      .select('id,name_zh,slug,icon')
+      .eq('workspace_key', workspaceKey),
+  ])
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  const categoryMap = new Map((categoriesData || []).map((category: CategoryRow) => [category.id, category]))
   const banks = ((data || []) as RuleTemplateRow[])
     .map((rule) => {
       const bank = parseSeoKeywordBank(rule.content)
-      return bank ? { ...bank, rule_id: rule.id, active: rule.active, updated_at: rule.updated_at } : null
+      const category = bank ? categoryMap.get(bank.category_id) : null
+      return bank ? {
+        ...bank,
+        rule_id: rule.id,
+        active: rule.active,
+        updated_at: rule.updated_at,
+        category_name_zh: category?.name_zh || '',
+        category_slug: category?.slug || '',
+        category_icon: category?.icon || '',
+      } : null
     })
     .filter(Boolean)
     .filter((bank) => !categoryId || bank?.category_id === categoryId)
