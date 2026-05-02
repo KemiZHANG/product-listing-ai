@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 import { defaultDetailPrompt } from '@/lib/product-generation'
+import { ensurePresetCategoriesForUser } from '@/lib/preset-seed'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -49,11 +50,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { data: categories, error } = await supabase
+  let { data: categories, error } = await supabase
     .from('categories')
     .select('*')
     .eq('workspace_key', workspaceKey)
     .order('sort_order', { ascending: true })
+
+  if (!error && (!categories || categories.length === 0)) {
+    await ensurePresetCategoriesForUser(supabase, user.id, workspaceKey)
+    const retry = await supabase
+      .from('categories')
+      .select('*')
+      .eq('workspace_key', workspaceKey)
+      .order('sort_order', { ascending: true })
+    categories = retry.data
+    error = retry.error
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })

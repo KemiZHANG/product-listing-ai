@@ -7,6 +7,7 @@ import {
   normalizeSeoKeywords,
 } from '@/lib/seo-keywords'
 import { ensureDefaultSeoKeywordBanks, mergeSeoKeywords } from '@/lib/default-seo-keywords'
+import { ensurePresetCategoriesForUser } from '@/lib/preset-seed'
 import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 
 export const dynamic = 'force-dynamic'
@@ -54,6 +55,16 @@ export async function GET(request: NextRequest) {
   const languageCode = searchParams.get('language_code')?.trim()
 
   try {
+    const { data: existingCategory } = await supabase
+      .from('categories')
+      .select('id')
+      .eq('workspace_key', workspaceKey)
+      .limit(1)
+
+    if (!existingCategory?.length) {
+      await ensurePresetCategoriesForUser(supabase, user.id, workspaceKey)
+    }
+
     await ensureDefaultSeoKeywordBanks(supabase, user.id, workspaceKey)
   } catch {
     // Keep the SEO page usable even if initial seeding hits a migration race.
