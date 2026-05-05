@@ -118,7 +118,7 @@ export default function CategoriesPage() {
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(250,204,21,0.18),transparent_30%),radial-gradient(circle_at_88%_8%,rgba(37,99,235,0.12),transparent_34%),linear-gradient(180deg,#ffffff_0%,#f8fafc_46%,#eef2f7_100%)]">
       <Navbar />
-      <main className="mx-auto max-w-[1600px] px-5 py-10 sm:px-8">
+      <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6">
         <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Category prompts</p>

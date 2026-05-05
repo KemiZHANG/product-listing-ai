@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
+import { getRequestSupabase } from '@/lib/supabase'
+import { getAuthorizedUser } from '@/lib/app-auth'
 import { encodeStoredGeminiSettings, isValidGeminiApiKey, parseStoredGeminiSettings } from '@/lib/gemini-settings'
 import { getBuiltinKeyAuthorization } from '@/lib/builtin-key-access'
 import { isAdminEmail } from '@/lib/admin'
@@ -37,7 +38,7 @@ async function withGenerationMode<T extends {
 
 export async function GET(request: NextRequest) {
   const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
+  const { user, error: authError } = await getAuthorizedUser(request)
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -77,7 +78,7 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
+  const { user, error: authError } = await getAuthorizedUser(request)
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

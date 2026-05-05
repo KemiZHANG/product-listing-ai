@@ -5,12 +5,29 @@ import { parseStoredGeminiSettings, readBuiltinGeminiApiKey } from '@/lib/gemini
 import { getRequestSupabase } from '@/lib/supabase'
 import { AI_ACCESS_ERROR, getGenerationAccess } from '@/lib/generation-access'
 import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
+import { analyzeProductCopyQuality } from '@/lib/product-quality'
+import { isSeoKeywordRule, parseSeoKeywordBank, type SeoKeywordBank } from '@/lib/seo-keywords'
+import {
+  SHOPEE_CATEGORY_ATTRIBUTE_KEY,
+  decodeShopeeCategorySelection,
+  formatShopeeCategorySelection,
+} from '@/lib/shopee-categories'
 
 export const maxDuration = 300
 
 type CopyRecord = {
   id: string
   product_id: string
+  generated_title: string
+  generated_description: string
+  language_code: string
+  products?: {
+    category_id: string | null
+    attributes: Record<string, string> | null
+  } | Array<{
+    category_id: string | null
+    attributes: Record<string, string> | null
+  }> | null
 }
 
 type CopyImageRecord = {
@@ -18,6 +35,8 @@ type CopyImageRecord = {
   copy_id: string
   prompt_number: number
   prompt_text: string
+  output_storage_path: string | null
+  pending_regeneration_note: string | null
 }
 
 type ProductImageRecord = {
@@ -141,17 +160,27 @@ export async function POST(request: NextRequest) {
 
   const { data: copies } = await supabase
     .from('product_copies')
-    .select('id, product_id')
+    .select('id, product_id, generated_title, generated_description, language_code, products(category_id, attributes)')
     .eq('workspace_key', workspaceKey)
     .in('id', copyIds)
 
-  const copyRecords = (copies || []) as CopyRecord[]
+  const copyRecords = (copies || []) as unknown as CopyRecord[]
   const productIds = Array.from(new Set(copyRecords.map((copy) => copy.product_id)))
+  const { data: rules } = await supabase
+    .from('rule_templates')
+    .select('name,content,active')
+    .eq('workspace_key', workspaceKey)
+    .eq('active', true)
+
+  const seoKeywordBanks = (rules || [])
+    .filter((rule) => isSeoKeywordRule(rule.name, rule.content))
+    .map((rule) => parseSeoKeywordBank(rule.content))
+    .filter(Boolean) as SeoKeywordBank[]
 
   const [{ data: copyImages }, { data: productImages }] = await Promise.all([
     supabase
       .from('product_copy_images')
-      .select('id, copy_id, prompt_number, prompt_text')
+      .select('id, copy_id, prompt_number, prompt_text, output_storage_path, pending_regeneration_note')
       .in('copy_id', copyRecords.map((copy) => copy.id))
       .eq('status', 'queued')
       .order('prompt_number', { ascending: true }),
@@ -200,7 +229,17 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      const generatedBase64 = await generateImage(apiKey, copyImage.prompt_text, references)
+      const regenerationInstruction = copyImage.pending_regeneration_note?.trim()
+      const promptText = regenerationInstruction
+        ? [
+            copyImage.prompt_text,
+            '',
+            '【本次单张重生要求】',
+            regenerationInstruction,
+            '请在不改变商品事实、包装、Logo、颜色和规格的前提下改进画面。',
+          ].join('\n')
+        : copyImage.prompt_text
+      const generatedBase64 = await generateImage(apiKey, promptText, references)
       const outputBuffer = Buffer.from(generatedBase64, 'base64')
       const outputFilename = `P${copyImage.prompt_number}_${Date.now()}.png`
       const outputPath = `${user.id}/product-copies/${copyImage.copy_id}/${outputFilename}`
@@ -214,14 +253,25 @@ export async function POST(request: NextRequest) {
 
       if (uploadError) throw new Error(uploadError.message)
 
+      const hasCurrentImage = Boolean(copyImage.output_storage_path)
       await supabase
         .from('product_copy_images')
-        .update({
-          status: 'completed',
-          error_message: null,
-          output_storage_path: outputPath,
-          output_filename: outputFilename,
-        })
+        .update(hasCurrentImage
+          ? {
+              status: 'needs_review',
+              error_message: null,
+              pending_storage_path: outputPath,
+              pending_filename: outputFilename,
+            }
+          : {
+              status: 'completed',
+              error_message: null,
+              output_storage_path: outputPath,
+              output_filename: outputFilename,
+              pending_storage_path: null,
+              pending_filename: null,
+              pending_regeneration_note: '',
+            })
         .eq('id', copyImage.id)
       completed += 1
     } catch (err) {
@@ -242,6 +292,48 @@ export async function POST(request: NextRequest) {
   const completedCopyIds = copyRecords
     .map((copy) => copy.id)
     .filter((copyId) => !failedCopyIds.has(copyId))
+
+  const { data: imageStatusRows } = await supabase
+    .from('product_copy_images')
+    .select('copy_id,status')
+    .in('copy_id', copyRecords.map((copy) => copy.id))
+
+  const imageStats = new Map<string, { total: number; completed: number }>()
+  for (const row of (imageStatusRows || []) as Array<{ copy_id: string; status: string }>) {
+    const stats = imageStats.get(row.copy_id) || { total: 0, completed: 0 }
+    stats.total += 1
+    if (row.status === 'completed' || row.status === 'needs_review') stats.completed += 1
+    imageStats.set(row.copy_id, stats)
+  }
+
+  for (const copy of copyRecords) {
+    const product = Array.isArray(copy.products) ? copy.products[0] : copy.products
+    const stats = imageStats.get(copy.id) || { total: 0, completed: 0 }
+    const seoBank = seoKeywordBanks.find((bank) =>
+      bank.category_id === product?.category_id &&
+      bank.language_code === copy.language_code
+    )
+    const shopeeCategory = formatShopeeCategorySelection(
+      decodeShopeeCategorySelection(product?.attributes?.[SHOPEE_CATEGORY_ATTRIBUTE_KEY])
+    )
+    const qualityReport = analyzeProductCopyQuality({
+      title: copy.generated_title,
+      description: copy.generated_description,
+      seoBank,
+      completedImageCount: stats.completed,
+      totalImageCount: stats.total,
+      shopeeCategory,
+    })
+
+    await supabase
+      .from('product_copies')
+      .update({
+        seo_score: qualityReport.seo.score,
+        quality_status: qualityReport.status,
+        quality_report: qualityReport,
+      })
+      .eq('id', copy.id)
+  }
 
   if (completedCopyIds.length > 0) {
     await supabase

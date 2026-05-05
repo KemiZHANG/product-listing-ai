@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthenticatedUser, getRequestSupabase } from '@/lib/supabase'
+import { getRequestSupabase } from '@/lib/supabase'
+import { getAuthorizedUser } from '@/lib/app-auth'
 import { cleanEnvSecret, readBuiltinGeminiApiKey } from '@/lib/gemini-settings'
 
 export async function POST(request: NextRequest) {
   const supabase = getRequestSupabase(request)
-  const { user, error: authError } = await getAuthenticatedUser(request)
+  const { user, error: authError } = await getAuthorizedUser(request)
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

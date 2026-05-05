@@ -5,8 +5,15 @@ import { useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import { apiFetch } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
-import { COPY_PLAN_ATTRIBUTE_KEY, PRODUCT_LANGUAGES } from '@/lib/types'
-import type { Category, Product, ProductAttributeColumn } from '@/lib/types'
+import {
+  COPY_IMAGE_PLAN_ATTRIBUTE_KEY,
+  COPY_PLAN_ATTRIBUTE_KEY,
+  DEFAULT_PRODUCT_IMAGE_ROLES,
+  PRODUCT_IMAGE_ROLE_OPTIONS,
+  PRODUCT_LANGUAGES,
+  normalizeProductImageRole,
+} from '@/lib/types'
+import type { Category, Product, ProductAttributeColumn, ProductImageRole } from '@/lib/types'
 import {
   SHOPEE_CATEGORY_ATTRIBUTE_KEY,
   SHOPEE_CATEGORY_TREE,
@@ -24,13 +31,60 @@ type ProductForm = {
   source_description: string
   selling_points: string
   languageCopyCounts: Record<string, number>
+  imageCopyPlan: ImageCopyPlanEntry[]
   shopeeCategory: ShopeeCategorySelection | null
   attributes: Record<string, string>
+}
+
+type ImageCopyPlanEntry = {
+  key: string
+  languageCode: string
+  copyIndex: number
+  imageRoles: ProductImageRole[]
 }
 
 const defaultLanguageCopyCounts = Object.fromEntries(
   PRODUCT_LANGUAGES.map((language) => [language.code, language.code === 'en' ? 1 : 0])
 )
+
+function imageCopyPlanKey(languageCode: string, copyIndex: number) {
+  return `${languageCode}-${copyIndex}`
+}
+
+function sanitizeImageRoles(value: unknown): ProductImageRole[] {
+  const roles = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(',')
+      : []
+  const normalized = roles
+    .map((role) => normalizeProductImageRole(String(role)))
+    .filter(Boolean) as ProductImageRole[]
+  const deduped = DEFAULT_PRODUCT_IMAGE_ROLES.filter((role) => normalized.includes(role))
+  return deduped.length > 0 ? deduped : DEFAULT_PRODUCT_IMAGE_ROLES
+}
+
+function buildImageCopyPlan(
+  counts: Record<string, number>,
+  previousPlan: ImageCopyPlanEntry[] = []
+): ImageCopyPlanEntry[] {
+  const previousByKey = new Map(previousPlan.map((entry) => [entry.key, entry]))
+
+  return PRODUCT_LANGUAGES.flatMap((language) => {
+    const count = Math.min(Math.max(Math.floor(Number(counts[language.code] || 0)), 0), 20)
+    return Array.from({ length: count }, (_, index) => {
+      const copyIndex = index + 1
+      const key = imageCopyPlanKey(language.code, copyIndex)
+      const previous = previousByKey.get(key)
+      return {
+        key,
+        languageCode: language.code,
+        copyIndex,
+        imageRoles: previous ? sanitizeImageRoles(previous.imageRoles) : DEFAULT_PRODUCT_IMAGE_ROLES,
+      }
+    })
+  })
+}
 
 const emptyForm: ProductForm = {
   sku: '',
@@ -39,6 +93,7 @@ const emptyForm: ProductForm = {
   source_description: '',
   selling_points: '',
   languageCopyCounts: defaultLanguageCopyCounts,
+  imageCopyPlan: buildImageCopyPlan(defaultLanguageCopyCounts),
   shopeeCategory: null,
   attributes: {},
 }
@@ -66,9 +121,38 @@ function parseLanguageCopyCounts(product?: Product | null) {
   return fallback
 }
 
+function parseImageCopyPlan(product?: Product | null) {
+  const counts = parseLanguageCopyCounts(product)
+  const rawPlan = product?.attributes?.[COPY_IMAGE_PLAN_ATTRIBUTE_KEY]
+
+  if (typeof rawPlan === 'string') {
+    try {
+      const parsed = JSON.parse(rawPlan) as { copies?: Array<Record<string, unknown>> }
+      const plan = (parsed.copies || [])
+        .map((entry) => {
+          const languageCode = String(entry.languageCode || '')
+          const copyIndex = Math.max(1, Math.floor(Number(entry.copyIndex || 1)))
+          return {
+            key: imageCopyPlanKey(languageCode, copyIndex),
+            languageCode,
+            copyIndex,
+            imageRoles: sanitizeImageRoles(entry.imageRoles),
+          }
+        })
+        .filter((entry) => PRODUCT_LANGUAGES.some((language) => language.code === entry.languageCode))
+      return buildImageCopyPlan(counts, plan)
+    } catch {
+      return buildImageCopyPlan(counts)
+    }
+  }
+
+  return buildImageCopyPlan(counts)
+}
+
 function publicAttributes(attributes?: Record<string, string> | null) {
   const next = { ...(attributes || {}) }
   delete next[COPY_PLAN_ATTRIBUTE_KEY]
+  delete next[COPY_IMAGE_PLAN_ATTRIBUTE_KEY]
   delete next[SHOPEE_CATEGORY_ATTRIBUTE_KEY]
   return next
 }
@@ -99,6 +183,7 @@ function normalizeForm(product?: Product | null): ProductForm {
     source_description: product.source_description || '',
     selling_points: product.selling_points || '',
     languageCopyCounts: parseLanguageCopyCounts(product),
+    imageCopyPlan: parseImageCopyPlan(product),
     shopeeCategory: decodeShopeeCategorySelection(product.attributes?.[SHOPEE_CATEGORY_ATTRIBUTE_KEY]),
     attributes: publicAttributes(product.attributes),
   }
@@ -291,7 +376,14 @@ export default function ProductDashboardPage() {
   }
 
   const openCreate = () => {
-    setForm({ ...emptyForm, languageCopyCounts: { ...defaultLanguageCopyCounts }, shopeeCategory: null, attributes: {} })
+    const languageCopyCounts = { ...defaultLanguageCopyCounts }
+    setForm({
+      ...emptyForm,
+      languageCopyCounts,
+      imageCopyPlan: buildImageCopyPlan(languageCopyCounts),
+      shopeeCategory: null,
+      attributes: {},
+    })
     setSourceFiles([])
     setFormOpen(true)
   }
@@ -305,6 +397,42 @@ export default function ProductDashboardPage() {
   const closeForm = () => {
     setFormOpen(false)
     setSourceFiles([])
+  }
+
+  const updateLanguageCopyCount = (languageCode: string, value: number) => {
+    setForm((current) => {
+      const languageCopyCounts = {
+        ...current.languageCopyCounts,
+        [languageCode]: value,
+      }
+      return {
+        ...current,
+        languageCopyCounts,
+        imageCopyPlan: buildImageCopyPlan(languageCopyCounts, current.imageCopyPlan),
+      }
+    })
+  }
+
+  const updateCopyImageRole = (copyKey: string, role: ProductImageRole, checked: boolean) => {
+    setForm((current) => ({
+      ...current,
+      imageCopyPlan: current.imageCopyPlan.map((entry) => {
+        if (entry.key !== copyKey) return entry
+        const nextRoles = checked
+          ? DEFAULT_PRODUCT_IMAGE_ROLES.filter((item) => [...entry.imageRoles, role].includes(item))
+          : entry.imageRoles.filter((item) => item !== role)
+        return { ...entry, imageRoles: nextRoles }
+      }),
+    }))
+  }
+
+  const setCopyImageRoles = (copyKey: string, roles: ProductImageRole[]) => {
+    setForm((current) => ({
+      ...current,
+      imageCopyPlan: current.imageCopyPlan.map((entry) =>
+        entry.key === copyKey ? { ...entry, imageRoles: DEFAULT_PRODUCT_IMAGE_ROLES.filter((role) => roles.includes(role)) } : entry
+      ),
+    }))
   }
 
   const uploadProductImages = async (productId: string, files: File[]) => {
@@ -360,6 +488,12 @@ export default function ProductDashboardPage() {
       const normalizedCounts = selectedLanguages.length > 0
         ? languageCopyCounts
         : { ...languageCopyCounts, en: 1 }
+      const imageCopyPlan = buildImageCopyPlan(normalizedCounts, form.imageCopyPlan)
+      const missingImagePlan = imageCopyPlan.find((entry) => entry.imageRoles.length === 0)
+      if (missingImagePlan) {
+        setError('每个语言副本至少需要勾选一种图片类型。')
+        return
+      }
       const maxCopyCount = Math.max(...Object.values(normalizedCounts), 1)
       const payload = {
         id: form.id,
@@ -373,6 +507,7 @@ export default function ProductDashboardPage() {
         attributes: {
           ...form.attributes,
           [COPY_PLAN_ATTRIBUTE_KEY]: JSON.stringify(normalizedCounts),
+          [COPY_IMAGE_PLAN_ATTRIBUTE_KEY]: JSON.stringify({ version: 1, copies: imageCopyPlan }),
           [SHOPEE_CATEGORY_ATTRIBUTE_KEY]: encodeShopeeCategorySelection(form.shopeeCategory),
         },
       }
@@ -517,49 +652,49 @@ export default function ProductDashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">
+      <div className="app-shell flex min-h-screen items-center justify-center text-sm text-slate-500">
         Loading...
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(250,204,21,0.22),transparent_30%),radial-gradient(circle_at_88%_8%,rgba(37,99,235,0.14),transparent_34%),linear-gradient(180deg,#ffffff_0%,#f8fafc_42%,#eef2f7_100%)] text-slate-950">
+    <div className="app-shell min-h-screen text-slate-950">
       <Navbar />
-      <main className="mx-auto max-w-[1600px] px-5 py-10 sm:px-8">
-        <section className="mb-7">
-          <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+      <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6">
+        <section className="hero-panel mb-5 rounded-[1.75rem] p-5 sm:p-6">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div>
               <div className="flex flex-wrap items-center gap-3">
-                <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Listing content studio</p>
-                <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 shadow-sm shadow-blue-100/70">2 主图 + 2 场景 + 2 详情图</span>
+                <p className="hero-kicker text-sm font-semibold uppercase">Listing content studio</p>
+                <span className="command-card rounded-full px-3 py-1 text-xs font-semibold text-sky-50">2 主图 + 2 场景 + 2 详情图</span>
               </div>
-              <h1 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">电商素材生成工作台</h1>
-              <p className="mt-4 max-w-3xl text-base leading-7 text-slate-600">
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-4xl">电商素材生成工作台</h1>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-200">
                 统一管理 SKU、参考图、标题、描述、类目和多语言副本，一次生成商品图、标题与描述。
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
-              <button onClick={openCreate} className="rounded-2xl bg-[linear-gradient(135deg,#071228,#0f172a)] px-6 py-3 text-sm font-semibold text-white shadow-xl shadow-slate-950/18 transition-transform hover:-translate-y-0.5 hover:bg-slate-800">
+              <button onClick={openCreate} className="rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-slate-950 shadow-xl shadow-black/20 transition-transform hover:-translate-y-0.5 hover:bg-sky-50">
                 新增商品
               </button>
               <button
                 onClick={() => importInputRef.current?.click()}
                 disabled={importing}
-                className="rounded-2xl border border-slate-300 bg-white/90 px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm transition-transform hover:-translate-y-0.5 hover:border-slate-400 hover:bg-white disabled:opacity-50"
+                className="command-card rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:opacity-50"
               >
                 {importing ? '导入中...' : '导入 Excel/CSV'}
               </button>
               <button
                 onClick={() => handleGenerate()}
                 disabled={selected.size === 0 || generating}
-                className="rounded-2xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-xl shadow-emerald-500/20 transition-transform hover:-translate-y-0.5 hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                className="rounded-xl bg-emerald-400 px-5 py-2.5 text-sm font-semibold text-slate-950 shadow-xl shadow-emerald-900/20 transition-transform hover:-translate-y-0.5 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
               >
                 {generating ? '创建中...' : `生成/重新生成已选商品 (${selected.size})`}
               </button>
             </div>
           </div>
-          <div className="mt-8 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {statCards.map((card) => {
               const value = card.key === 'products'
                 ? products.length
@@ -569,14 +704,14 @@ export default function ProductDashboardPage() {
                     ? stats.copyTarget
                     : columns.length
               return (
-                <div key={card.key} className={`rounded-[1.4rem] border border-slate-200/80 bg-white/82 p-6 shadow-[0_18px_55px_rgba(15,23,42,0.06)] ring-1 ring-white/70 backdrop-blur transition-transform hover:-translate-y-0.5 ${card.tone.split(' ')[0]}`}>
-                  <div className="flex items-center gap-5">
-                    <span className={`flex h-14 w-14 items-center justify-center rounded-full text-2xl ${card.tone.replace(card.tone.split(' ')[0], '')}`}>
+                <div key={card.key} className="command-card rounded-[1.15rem] p-4 transition-transform hover:-translate-y-0.5">
+                  <div className="flex items-center gap-3">
+                    <span className={`flex h-11 w-11 items-center justify-center rounded-full text-xl ${card.tone.replace(card.tone.split(' ')[0], '')}`}>
                       {card.icon}
                     </span>
                     <div>
-                      <div className="text-3xl font-semibold tracking-tight text-slate-950">{value}</div>
-                      <div className="mt-1 text-sm text-slate-500">{card.label}</div>
+                      <div className="metric-number text-2xl font-semibold tracking-tight text-white">{value}</div>
+                      <div className="mt-1 text-sm text-slate-300">{card.label}</div>
                     </div>
                   </div>
                 </div>
@@ -588,7 +723,7 @@ export default function ProductDashboardPage() {
         {error && <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700 shadow-sm">{error}</div>}
         {notice && <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700 shadow-sm">{notice}</div>}
 
-        <section className="mb-5 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+        <section className="glass-surface mb-4 flex flex-col gap-3 rounded-[1.25rem] p-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-base font-semibold text-slate-950">全局属性</span>
             <input
@@ -615,10 +750,10 @@ export default function ProductDashboardPage() {
           </div>
         </section>
 
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-sm">
+        <section className="glass-surface overflow-hidden rounded-[1.25rem]">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <thead className="bg-slate-950 text-left text-xs font-semibold uppercase tracking-wide text-slate-100">
                 <tr>
                   <th className="w-10 px-3 py-3"></th>
                   <th className="px-3 py-3">SKU</th>
@@ -718,7 +853,7 @@ export default function ProductDashboardPage() {
                         {(product.images || []).length === 0
                           ? '缺少原图'
                           : product.copy_count_generated
-                            ? `已生成 ${product.copy_count_generated} 个`
+                            ? `已生成 ${product.copy_count_generated} 个副本，可重新生成`
                             : product.status}
                       </span>
                     </td>
@@ -729,7 +864,7 @@ export default function ProductDashboardPage() {
                           disabled={generating || (product.images || []).length === 0}
                           className="rounded-lg px-2 py-1 text-sm font-semibold text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800 disabled:text-slate-300"
                         >
-                          {product.copy_count_generated ? '重新生成' : '生成'}
+                          {product.copy_count_generated ? '重新生成副本' : '生成副本'}
                         </button>
                         <button onClick={() => openEdit(product)} className="rounded-lg px-2 py-1 text-sm font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-800">编辑</button>
                         <button onClick={() => handleDelete(product)} className="rounded-lg px-2 py-1 text-sm font-semibold text-red-600 hover:bg-red-50 hover:text-red-800">删除</button>
@@ -754,7 +889,7 @@ export default function ProductDashboardPage() {
               <div>
                 <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{form.id ? '编辑商品' : '新增商品'}</h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  填写商品原始资料，上传参考图后可生成多语言副本和 6 张商品图。
+                  填写商品原始资料，上传参考图后可生成多语言副本和按需勾选的商品图。
                 </p>
               </div>
               <button type="button" onClick={closeForm} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="关闭">
@@ -832,7 +967,7 @@ export default function ProductDashboardPage() {
                   </button>
                 </div>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  这些图片会存到该 SKU 下，生成每个副本的 6 张图时都会作为参考图一起传入模型。多张原图可以同时参考。
+                  这些图片会存到该 SKU 下，生成每个副本勾选的图片类型时都会作为参考图一起传入模型。多张原图可以同时参考。
                 </p>
                 {sourceFiles.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -887,13 +1022,7 @@ export default function ProductDashboardPage() {
                         value={form.languageCopyCounts[language.code] || 0}
                         onChange={(event) => {
                           const value = Math.min(Math.max(Math.floor(Number(event.target.value || 0)), 0), 20)
-                          setForm({
-                            ...form,
-                            languageCopyCounts: {
-                              ...form.languageCopyCounts,
-                              [language.code]: value,
-                            },
-                          })
+                          updateLanguageCopyCount(language.code, value)
                         }}
                         className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none transition-colors focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
                       />
@@ -901,8 +1030,83 @@ export default function ProductDashboardPage() {
                   ))}
                 </div>
                 <p className="mt-2 text-xs leading-5 text-slate-500">
-                  填 0 表示不生成该语言。例：英语 2、马来语 1、其他 0，会生成 3 个副本；每个副本都会重新生成标题、描述和 6 张图片。
+                  填 0 表示不生成该语言。例：英语 2、马来语 1、其他 0，会生成 3 个独立副本；每个副本都会重新生成标题、描述，并按勾选生成 1 到 3 张图片。
                 </p>
+              </div>
+              <div className="md:col-span-2">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <span className="block text-sm font-semibold text-slate-700">每个副本要生成的图片类型</span>
+                    <span className="mt-1 block text-xs text-slate-500">
+                      每个语言副本独立选择。只勾主图就只生成 1 张，全勾最多生成 3 张。
+                    </span>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                    共 {form.imageCopyPlan.reduce((sum, entry) => sum + entry.imageRoles.length, 0)} 张图片任务
+                  </span>
+                </div>
+                {form.imageCopyPlan.length > 0 ? (
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {form.imageCopyPlan.map((entry) => {
+                      const language = PRODUCT_LANGUAGES.find((item) => item.code === entry.languageCode)
+                      return (
+                        <div key={entry.key} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <div className="font-semibold text-slate-900">
+                              {language?.label || entry.languageCode} {entry.copyIndex}
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setCopyImageRoles(entry.key, DEFAULT_PRODUCT_IMAGE_ROLES)}
+                                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                              >
+                                全选
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCopyImageRoles(entry.key, ['main'])}
+                                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                              >
+                                只主图
+                              </button>
+                            </div>
+                          </div>
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            {PRODUCT_IMAGE_ROLE_OPTIONS.map((role) => {
+                              const checked = entry.imageRoles.includes(role.value)
+                              return (
+                                <label
+                                  key={`${entry.key}-${role.value}`}
+                                  className={`cursor-pointer rounded-xl border px-3 py-2 transition-colors ${
+                                    checked ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-slate-50 text-slate-600'
+                                  }`}
+                                >
+                                  <span className="flex items-center gap-2 text-sm font-semibold">
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={(event) => updateCopyImageRole(entry.key, role.value, event.target.checked)}
+                                    />
+                                    {role.label}
+                                  </span>
+                                  <span className="mt-1 block text-xs text-slate-500">{role.description}</span>
+                                </label>
+                              )
+                            })}
+                          </div>
+                          {entry.imageRoles.length === 0 && (
+                            <p className="mt-2 text-xs font-semibold text-red-600">至少勾选一种图片类型。</p>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                    请先把至少一个语言副本数量设为 1。
+                  </div>
+                )}
               </div>
               {columns.map((column) => (
                 <label key={column.id} className="block">

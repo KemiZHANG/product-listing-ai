@@ -159,6 +159,51 @@ ON public.product_copies(product_id);
 ALTER TABLE public.product_copies
 ADD COLUMN IF NOT EXISTS staff_note TEXT NOT NULL DEFAULT '';
 
+ALTER TABLE public.product_copies
+ADD COLUMN IF NOT EXISTS listing_status TEXT NOT NULL DEFAULT 'not_listed';
+
+ALTER TABLE public.product_copies
+ADD COLUMN IF NOT EXISTS store_name TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE public.product_copies
+ADD COLUMN IF NOT EXISTS listed_at TIMESTAMPTZ;
+
+ALTER TABLE public.product_copies
+ADD COLUMN IF NOT EXISTS operator_note TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE public.product_copies
+ADD COLUMN IF NOT EXISTS operator_email TEXT;
+
+ALTER TABLE public.product_copies
+ADD COLUMN IF NOT EXISTS seo_score INT NOT NULL DEFAULT 0;
+
+ALTER TABLE public.product_copies
+ADD COLUMN IF NOT EXISTS quality_status TEXT NOT NULL DEFAULT 'warning';
+
+ALTER TABLE public.product_copies
+ADD COLUMN IF NOT EXISTS quality_report JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'product_copies_listing_status_check'
+  ) THEN
+    ALTER TABLE public.product_copies
+    ADD CONSTRAINT product_copies_listing_status_check
+    CHECK (listing_status IN ('not_listed','listed','needs_edit','paused','done'));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'product_copies_quality_status_check'
+  ) THEN
+    ALTER TABLE public.product_copies
+    ADD CONSTRAINT product_copies_quality_status_check
+    CHECK (quality_status IN ('pass','warning','fail'));
+  END IF;
+END $$;
+
 -- 5b. Workspace sharing migration.
 ALTER TABLE public.product_attribute_columns
 ADD COLUMN IF NOT EXISTS workspace_key TEXT NOT NULL DEFAULT 'external'
@@ -314,6 +359,11 @@ CREATE TABLE IF NOT EXISTS public.product_copy_images (
   prompt_text           TEXT NOT NULL,
   output_storage_path   TEXT,
   output_filename       TEXT,
+  pending_storage_path  TEXT,
+  pending_filename      TEXT,
+  pending_regeneration_note TEXT NOT NULL DEFAULT '',
+  previous_storage_path TEXT,
+  previous_filename     TEXT,
   status                TEXT NOT NULL DEFAULT 'queued'
                         CHECK (status IN ('queued','generating','completed','failed','needs_review')),
   error_message         TEXT,

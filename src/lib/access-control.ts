@@ -5,6 +5,5 @@ export function normalizeEmail(email: string | null | undefined) {
 }
 
 export function isAllowedAppEmail(email: string | null | undefined) {
-  return ALLOWED_APP_EMAILS.includes(normalizeEmail(email))
+  return Boolean(normalizeEmail(email))
 }
-

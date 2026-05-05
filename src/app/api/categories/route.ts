@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
-import { defaultDetailPrompt } from '@/lib/product-generation'
+import { defaultDetailPrompt, defaultMainPrompt, defaultScenePrompt } from '@/lib/product-generation'
 import { ensurePresetCategoriesForUser } from '@/lib/preset-seed'
 
 export const dynamic = 'force-dynamic'
@@ -43,11 +43,34 @@ function dedupeVisibleCategories(categories: EnrichedCategory[]) {
   })
 }
 
+function defaultPromptRows(categoryId: string, categoryName: string) {
+  return [
+    {
+      category_id: categoryId,
+      prompt_number: 1,
+      prompt_role: 'main',
+      prompt_text: defaultMainPrompt(categoryName, 1),
+    },
+    {
+      category_id: categoryId,
+      prompt_number: 2,
+      prompt_role: 'scene',
+      prompt_text: defaultScenePrompt(categoryName, 1),
+    },
+    {
+      category_id: categoryId,
+      prompt_number: 3,
+      prompt_role: 'detail',
+      prompt_text: defaultDetailPrompt(categoryName, 1),
+    },
+  ]
+}
+
 export async function GET(request: NextRequest) {
   const supabase = getWorkspaceSupabase()
   const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
   if (authError || !user || !workspaceKey) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: authError || 'Unauthorized' }, { status: 401 })
   }
 
   let { data: categories, error } = await supabase
@@ -102,11 +125,13 @@ export async function POST(request: NextRequest) {
   const supabase = getWorkspaceSupabase()
   const { user, workspaceKey, error: authError } = await getWorkspaceContext(request)
   if (authError || !user || !workspaceKey) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: authError || 'Unauthorized' }, { status: 401 })
   }
 
   const body = await request.json()
-  const { name_zh, slug, icon } = body
+  const name_zh = String(body.name_zh || '').trim()
+  const slug = String(body.slug || '').trim()
+  const icon = String(body.icon || '').trim()
 
   if (!name_zh || !slug) {
     return NextResponse.json({ error: 'name_zh and slug are required' }, { status: 400 })
@@ -114,7 +139,6 @@ export async function POST(request: NextRequest) {
 
   const normalizedSlug = slug.replace(/-migrated-\d+$/, '')
 
-  // Check slug uniqueness per workspace, including old migrated duplicates.
   const { data: existing } = await supabase
     .from('categories')
     .select('id,slug')
@@ -126,7 +150,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Slug already exists' }, { status: 409 })
   }
 
-  // Get current max sort_order
   const { data: maxSort } = await supabase
     .from('categories')
     .select('sort_order')
@@ -144,7 +167,7 @@ export async function POST(request: NextRequest) {
       workspace_key: workspaceKey,
       name_zh,
       slug: normalizedSlug,
-      icon: icon || '📦',
+      icon: icon || 'box',
       sort_order: nextSortOrder,
     })
     .select()
@@ -154,44 +177,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  await supabase.from('category_prompts').insert([
-    {
-      category_id: data.id,
-      prompt_number: 1,
-      prompt_role: 'main_1',
-      prompt_text: `以我上传的所有产品原图为唯一产品参考，严格保持产品外观、包装、标签、logo、颜色、比例和可见文字不变。生成一张高端电商${name_zh}商品主图，产品完整清晰并作为视觉中心，背景高级、干净、有层次，1:1正方形构图。`,
-    },
-    {
-      category_id: data.id,
-      prompt_number: 2,
-      prompt_role: 'main_2',
-      prompt_text: `以我上传的所有产品原图为唯一产品参考，严格保持产品本体不变。生成一张与第一张主图有细微差异的${name_zh}商品主图，调整陈列、光线、背景材质和构图层次，但不要改变商品信息，1:1正方形构图。`,
-    },
-    {
-      category_id: data.id,
-      prompt_number: 3,
-      prompt_role: 'model_scene_1',
-      prompt_text: `以我上传的所有产品原图为唯一产品参考，严格保持商品外观和包装不变。生成一张${name_zh}模特或使用场景图，人物或场景只作为辅助，商品必须清晰完整且为核心，画面真实高级，1:1正方形构图。`,
-    },
-    {
-      category_id: data.id,
-      prompt_number: 4,
-      prompt_role: 'model_scene_2',
-      prompt_text: `以我上传的所有产品原图为唯一产品参考，严格保持商品外观和包装不变。生成另一张${name_zh}使用场景图，与上一张在场景、光线和构图上有差异，商品仍然是视觉重点，1:1正方形构图。`,
-    },
-    {
-      category_id: data.id,
-      prompt_number: 5,
-      prompt_role: 'detail_1',
-      prompt_text: defaultDetailPrompt(name_zh, 1),
-    },
-    {
-      category_id: data.id,
-      prompt_number: 6,
-      prompt_role: 'detail_2',
-      prompt_text: defaultDetailPrompt(name_zh, 2),
-    },
-  ])
+  const { error: promptError } = await supabase.from('category_prompts').insert(defaultPromptRows(data.id, name_zh))
+  if (promptError) {
+    return NextResponse.json({ error: promptError.message }, { status: 500 })
+  }
 
   return NextResponse.json(data, { status: 201 })
 }

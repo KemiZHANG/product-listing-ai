@@ -16,7 +16,6 @@ export interface Category {
   is_preset: boolean
   created_at: string
   updated_at: string
-  // joined data
   prompt_count?: number
   image_count?: number
   last_job_status?: string | null
@@ -53,7 +52,6 @@ export interface Job {
   error_message: string | null
   created_at: string
   updated_at: string
-  // joined
   snapshots?: JobSnapshot[]
   items?: JobItem[]
 }
@@ -161,6 +159,30 @@ export interface Product {
 }
 
 export const COPY_PLAN_ATTRIBUTE_KEY = '__language_copy_counts'
+export const COPY_IMAGE_PLAN_ATTRIBUTE_KEY = '__language_copy_plan_v2'
+
+export type ProductImageRole = 'main' | 'scene' | 'detail'
+
+export const PRODUCT_IMAGE_ROLE_OPTIONS: Array<{ value: ProductImageRole; label: string; description: string }> = [
+  { value: 'main', label: '主图', description: '干净商品展示图' },
+  { value: 'scene', label: '场景图', description: '生活/使用场景图' },
+  { value: 'detail', label: '详情图', description: '卖点/规格信息图' },
+]
+
+export const DEFAULT_PRODUCT_IMAGE_ROLES: ProductImageRole[] = PRODUCT_IMAGE_ROLE_OPTIONS.map((role) => role.value)
+
+export function normalizeProductImageRole(role: string | null | undefined): ProductImageRole | null {
+  const key = String(role || '').trim().toLowerCase()
+  if (key === 'main' || key === 'main_1' || key === 'main_2') return 'main'
+  if (key === 'scene' || key === 'model_scene_1' || key === 'model_scene_2') return 'scene'
+  if (key === 'detail' || key === 'detail_1' || key === 'detail_2') return 'detail'
+  return null
+}
+
+export function getProductImageRoleLabel(role: string | null | undefined) {
+  const normalized = normalizeProductImageRole(role)
+  return PRODUCT_IMAGE_ROLE_OPTIONS.find((item) => item.value === normalized)?.label || '自定义图'
+}
 
 export interface RuleTemplate {
   id: string
@@ -181,11 +203,19 @@ export interface ProductCopyImage {
   prompt_text: string
   output_storage_path: string | null
   output_filename: string | null
+  pending_storage_path?: string | null
+  pending_filename?: string | null
+  pending_regeneration_note?: string | null
+  previous_storage_path?: string | null
+  previous_filename?: string | null
   status: 'queued' | 'generating' | 'completed' | 'failed' | 'needs_review'
   error_message: string | null
   created_at: string
   updated_at: string
 }
+
+export type ListingStatus = 'not_listed' | 'listed' | 'needs_edit' | 'paused' | 'done'
+export type QualityStatus = 'pass' | 'warning' | 'fail'
 
 export interface ProductCopy {
   id: string
@@ -198,6 +228,14 @@ export interface ProductCopy {
   generated_title: string
   generated_description: string
   staff_note?: string | null
+  listing_status?: ListingStatus
+  store_name?: string | null
+  listed_at?: string | null
+  operator_note?: string | null
+  operator_email?: string | null
+  seo_score?: number | null
+  quality_status?: QualityStatus | null
+  quality_report?: Record<string, unknown> | null
   status: 'queued' | 'generating' | 'completed' | 'failed' | 'needs_review'
   error_message: string | null
   created_at: string
@@ -215,17 +253,19 @@ export const PRODUCT_LANGUAGES = [
   { code: 'vi', label: '越南语' },
 ]
 
-export const DEFAULT_PROMPT_ROLES = [
+export const DEFAULT_PROMPT_ROLES = PRODUCT_IMAGE_ROLE_OPTIONS.map(({ value, label }) => ({ value, label }))
+
+export const LEGACY_PROMPT_ROLES = [
   { value: 'main_1', label: '主图 1' },
   { value: 'main_2', label: '主图 2' },
-  { value: 'model_scene_1', label: '模特/使用场景图 1' },
-  { value: 'model_scene_2', label: '模特/使用场景图 2' },
-  { value: 'detail_1', label: '商品详情图 1' },
-  { value: 'detail_2', label: '商品详情图 2' },
+  { value: 'model_scene_1', label: '场景图 1' },
+  { value: 'model_scene_2', label: '场景图 2' },
+  { value: 'detail_1', label: '详情图 1' },
+  { value: 'detail_2', label: '详情图 2' },
 ]
 
 export const CATEGORY_ICONS = [
-  '🧴', '🧼', '🪥', '💄', '👁️', '👶', '🧖', '💅',
-  '🧴', '🫧', '🧴', '🧽', '🪮', '🪒', '🧻', '🌸',
-  '🌿', '💧', '✨', '🎀', '🪞', '🧪', '📦'
+  '🧴', '💄', '🧼', '🧺', '👟', '👗', '🧸', '🎁',
+  '🏠', '🍽️', '🛁', '🛏️', '🌿', '🔧', '🧹', '🪑',
+  '☕', '🍫', '✨', '🧃', '🍜', '🥗', '📦',
 ]

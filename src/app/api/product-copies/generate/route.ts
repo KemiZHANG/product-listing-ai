@@ -2,21 +2,90 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getRequestSupabase } from '@/lib/supabase'
 import { isAdminEmail } from '@/lib/admin'
 import { isBuiltinKeyEmailAuthorized } from '@/lib/builtin-key-access'
-import { buildProductImagePrompt, buildTitleDescriptionPrompt, defaultDetailPrompt, getLanguageLabel } from '@/lib/product-generation'
+import {
+  buildProductImagePrompt,
+  buildTitleDescriptionPrompt,
+  defaultDetailPrompt,
+  defaultMainPrompt,
+  defaultScenePrompt,
+  getLanguageLabel,
+} from '@/lib/product-generation'
 import { parseStoredGeminiSettings, readBuiltinGeminiApiKey } from '@/lib/gemini-settings'
-import { COPY_PLAN_ATTRIBUTE_KEY, PRODUCT_LANGUAGES } from '@/lib/types'
+import {
+  COPY_IMAGE_PLAN_ATTRIBUTE_KEY,
+  COPY_PLAN_ATTRIBUTE_KEY,
+  DEFAULT_PRODUCT_IMAGE_ROLES,
+  PRODUCT_LANGUAGES,
+  normalizeProductImageRole,
+  type ProductImageRole,
+} from '@/lib/types'
 import { formatSeoKeywordPrompt, isSeoKeywordRule, parseSeoKeywordBank, type SeoKeywordBank } from '@/lib/seo-keywords'
 import { AI_ACCESS_ERROR, getGenerationAccess } from '@/lib/generation-access'
 import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
+import { analyzeProductCopyQuality } from '@/lib/product-quality'
+import { softenComplianceRiskText } from '@/lib/listing-text'
+import {
+  SHOPEE_CATEGORY_ATTRIBUTE_KEY,
+  decodeShopeeCategorySelection,
+  formatShopeeCategorySelection,
+} from '@/lib/shopee-categories'
 
-const ROLE_ORDER = ['main_1', 'main_2', 'model_scene_1', 'model_scene_2', 'detail_1', 'detail_2']
+const IMAGE_ROLE_ORDER: ProductImageRole[] = ['main', 'scene', 'detail']
 
 function promptRole(number: number) {
-  return ROLE_ORDER[number - 1] || 'custom'
+  return IMAGE_ROLE_ORDER[number - 1] || 'custom'
 }
 
-function copyIndexes(count: number) {
-  return Array.from({ length: Math.max(1, Math.min(count || 1, 20)) }, (_, index) => index + 1)
+function promptNumberForRole(role: ProductImageRole) {
+  return IMAGE_ROLE_ORDER.indexOf(role) + 1
+}
+
+function normalizeImageRoles(value: unknown): ProductImageRole[] {
+  const roles = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(',')
+      : []
+  const normalized = roles
+    .map((role) => normalizeProductImageRole(String(role)))
+    .filter(Boolean) as ProductImageRole[]
+  const deduped = IMAGE_ROLE_ORDER.filter((role) => normalized.includes(role))
+  return deduped.length > 0 ? deduped : DEFAULT_PRODUCT_IMAGE_ROLES
+}
+
+function parseJsonRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as Record<string, unknown>
+    } catch {
+      return null
+    }
+  }
+
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+
+  return null
+}
+
+function copySlotKey(languageCode: string, copyIndex: number) {
+  return `${languageCode}-${copyIndex}`
+}
+
+function buildCopySlotsFromCounts(counts: Record<string, number>) {
+  return PRODUCT_LANGUAGES.flatMap((language) => {
+    const count = Math.min(Math.max(Math.floor(Number(counts[language.code] || 0)), 0), 20)
+    return Array.from({ length: count }, (_, index) => {
+      const copyIndex = index + 1
+      return {
+        key: copySlotKey(language.code, copyIndex),
+        languageCode: language.code,
+        copyIndex,
+        imageRoles: DEFAULT_PRODUCT_IMAGE_ROLES,
+      }
+    })
+  })
 }
 
 function parseLanguageCopyPlan(product: {
@@ -26,27 +95,32 @@ function parseLanguageCopyPlan(product: {
 }) {
   const allowedCodes = new Set(PRODUCT_LANGUAGES.map((language) => language.code))
   const rawPlan = product.attributes?.[COPY_PLAN_ATTRIBUTE_KEY]
-  let parsed: Record<string, unknown> | null = null
-
-  if (typeof rawPlan === 'string') {
-    try {
-      parsed = JSON.parse(rawPlan)
-    } catch {
-      parsed = null
-    }
-  } else if (rawPlan && typeof rawPlan === 'object' && !Array.isArray(rawPlan)) {
-    parsed = rawPlan as Record<string, unknown>
-  }
+  const parsed = parseJsonRecord(rawPlan)
 
   if (parsed) {
-    const plan = PRODUCT_LANGUAGES
-      .map((language) => ({
-        languageCode: language.code,
-        count: Math.min(Math.max(Math.floor(Number(parsed?.[language.code] || 0)), 0), 20),
-      }))
-      .filter((item) => item.count > 0)
+    const counts = Object.fromEntries(PRODUCT_LANGUAGES.map((language) => [
+      language.code,
+      Math.min(Math.max(Math.floor(Number(parsed?.[language.code] || 0)), 0), 20),
+    ]))
+    const slots = buildCopySlotsFromCounts(counts)
+    if (slots.length > 0) {
+      const imagePlan = parseJsonRecord(product.attributes?.[COPY_IMAGE_PLAN_ATTRIBUTE_KEY])
+      const plannedCopies = Array.isArray(imagePlan?.copies) ? imagePlan.copies : []
+      const imagePlanByKey = new Map<string, ProductImageRole[]>()
+      for (const item of plannedCopies) {
+        if (!item || typeof item !== 'object') continue
+        const record = item as Record<string, unknown>
+        const languageCode = String(record.languageCode || '')
+        const copyIndex = Math.max(1, Math.floor(Number(record.copyIndex || 1)))
+        if (!allowedCodes.has(languageCode)) continue
+        imagePlanByKey.set(copySlotKey(languageCode, copyIndex), normalizeImageRoles(record.imageRoles))
+      }
 
-    if (plan.length > 0) return plan
+      return slots.map((slot) => ({
+        ...slot,
+        imageRoles: imagePlanByKey.get(slot.key) || slot.imageRoles,
+      }))
+    }
   }
 
   const fallbackLanguages = Array.isArray(product.languages)
@@ -54,8 +128,11 @@ function parseLanguageCopyPlan(product: {
     : []
   const languages = fallbackLanguages.length > 0 ? fallbackLanguages : ['en']
   const count = Math.max(1, Math.min(Number(product.copy_count || 1), 20))
-
-  return languages.map((languageCode) => ({ languageCode, count }))
+  const counts = Object.fromEntries(PRODUCT_LANGUAGES.map((language) => [
+    language.code,
+    languages.includes(language.code) ? count : 0,
+  ]))
+  return buildCopySlotsFromCounts(counts)
 }
 
 async function getTextGenerationApiKey(
@@ -109,6 +186,29 @@ async function generateTitleDescription(apiKey: string | null, prompt: string) {
   } catch {
     return null
   }
+}
+
+function defaultPromptForRole(categoryName: string, role: ProductImageRole) {
+  if (role === 'main') return defaultMainPrompt(categoryName, 1)
+  if (role === 'scene') return defaultScenePrompt(categoryName, 1)
+  return defaultDetailPrompt(categoryName, 1)
+}
+
+function legacyPromptNumberForRole(role: ProductImageRole) {
+  if (role === 'main') return 1
+  if (role === 'scene') return 3
+  return 5
+}
+
+function findPromptForRole(
+  prompts: Array<{ prompt_number: number; prompt_role?: string | null; prompt_text?: string | null }> | null | undefined,
+  role: ProductImageRole
+) {
+  const normalizedMatch = (prompts || []).find((prompt) => normalizeProductImageRole(prompt.prompt_role) === role)
+  if (normalizedMatch?.prompt_text) return normalizedMatch
+  const legacyMatch = (prompts || []).find((prompt) => prompt.prompt_number === legacyPromptNumberForRole(role))
+  if (legacyMatch?.prompt_text) return legacyMatch
+  return null
 }
 
 export async function POST(request: NextRequest) {
@@ -180,13 +280,13 @@ export async function POST(request: NextRequest) {
       .order('prompt_number', { ascending: true })
 
     const categoryName = product.categories?.name_zh || '商品'
-    const promptTemplates = ROLE_ORDER.map((role, index) => {
-      const number = index + 1
-      const existing = (prompts || []).find((prompt) => prompt.prompt_number === number)
+    const promptTemplatesByRole = new Map(IMAGE_ROLE_ORDER.map((role) => {
+      const number = promptNumberForRole(role)
+      const existing = findPromptForRole(prompts, role)
       if (existing?.prompt_text) {
         return {
           prompt_number: number,
-          prompt_role: existing.prompt_role || role,
+          prompt_role: role,
           prompt_text: existing.prompt_text,
         }
       }
@@ -194,23 +294,29 @@ export async function POST(request: NextRequest) {
       return {
         prompt_number: number,
         prompt_role: role,
-        prompt_text: role === 'detail_1'
-          ? defaultDetailPrompt(categoryName, 1)
-          : defaultDetailPrompt(categoryName, 2),
+        prompt_text: defaultPromptForRole(categoryName, role),
       }
-    })
+    }).map((prompt) => [prompt.prompt_role, prompt]))
 
     await supabase.from('product_copies').delete().eq('product_id', product.id)
 
     const copyPlan = parseLanguageCopyPlan(product)
-    for (const { languageCode, count } of copyPlan) {
+    for (const { languageCode, copyIndex, imageRoles } of copyPlan) {
       const languageLabel = getLanguageLabel(languageCode)
-      for (const copyIndex of copyIndexes(count)) {
+      const selectedPromptTemplates = imageRoles
+        .map((role) => promptTemplatesByRole.get(role))
+        .filter(Boolean) as Array<{ prompt_number: number; prompt_role: ProductImageRole; prompt_text: string }>
+
+      if (selectedPromptTemplates.length === 0) {
+        continue
+      }
+
+        const seoKeywordBank = seoKeywordBanks.find((bank) =>
+          bank.category_id === product.category_id &&
+          bank.language_code === languageCode
+        )
         const seoKeywordText = formatSeoKeywordPrompt(
-          seoKeywordBanks.find((bank) =>
-            bank.category_id === product.category_id &&
-            bank.language_code === languageCode
-          )
+          seoKeywordBank
         )
         const textResult = await generateTitleDescription(textApiKey, buildTitleDescriptionPrompt({
           sku: product.sku,
@@ -224,6 +330,19 @@ export async function POST(request: NextRequest) {
           ruleText,
           seoKeywordText,
         }))
+        const generatedTitle = softenComplianceRiskText(textResult?.title || product.source_title || '')
+        const generatedDescription = softenComplianceRiskText(textResult?.description || product.source_description || '')
+        const shopeeCategory = formatShopeeCategorySelection(
+          decodeShopeeCategorySelection(product.attributes?.[SHOPEE_CATEGORY_ATTRIBUTE_KEY])
+        )
+        const qualityReport = analyzeProductCopyQuality({
+          title: generatedTitle,
+          description: generatedDescription,
+          seoBank: seoKeywordBank,
+          completedImageCount: 0,
+          totalImageCount: selectedPromptTemplates.length,
+          shopeeCategory,
+        })
 
         const { data: copy, error: copyError } = await supabase
           .from('product_copies')
@@ -235,8 +354,11 @@ export async function POST(request: NextRequest) {
             copy_index: copyIndex,
             language_code: languageCode,
             language_label: languageLabel,
-            generated_title: textResult?.title || product.source_title || '',
-            generated_description: textResult?.description || product.source_description || '',
+            generated_title: generatedTitle,
+            generated_description: generatedDescription,
+            seo_score: qualityReport.seo.score,
+            quality_status: qualityReport.status,
+            quality_report: qualityReport,
             status: 'queued',
           })
           .select()
@@ -247,7 +369,7 @@ export async function POST(request: NextRequest) {
         }
 
         createdCopyIds.push(copy.id)
-        const images = promptTemplates.map((prompt) => ({
+        const images = selectedPromptTemplates.map((prompt) => ({
           copy_id: copy.id,
           prompt_number: prompt.prompt_number,
           prompt_role: prompt.prompt_role || promptRole(prompt.prompt_number),
@@ -262,12 +384,12 @@ export async function POST(request: NextRequest) {
             copyIndex,
             ruleText,
             seoKeywordText,
+            promptRole: prompt.prompt_role || promptRole(prompt.prompt_number),
           }),
           status: 'queued',
         }))
 
         await supabase.from('product_copy_images').insert(images)
-      }
     }
 
     await supabase

@@ -1,7 +1,9 @@
 import type { NextRequest } from 'next/server'
 import { isAdminEmail } from './admin'
 import { isBuiltinKeyEmailAuthorized } from './builtin-key-access'
-import { getAuthenticatedUser, getServerSupabase } from './supabase'
+import { getAuthorizedUser } from './app-auth'
+import { getAppEdition } from './app-edition'
+import { getServerSupabase } from './supabase'
 
 export const INTERNAL_WORKSPACE_KEY = 'internal'
 export const EXTERNAL_WORKSPACE_KEY = 'external'
@@ -9,6 +11,10 @@ export const EXTERNAL_WORKSPACE_KEY = 'external'
 export type WorkspaceKey = typeof INTERNAL_WORKSPACE_KEY | typeof EXTERNAL_WORKSPACE_KEY
 
 export async function getWorkspaceKeyForEmail(email: string | null | undefined): Promise<WorkspaceKey> {
+  if (getAppEdition() === 'resume') {
+    return EXTERNAL_WORKSPACE_KEY
+  }
+
   if (isAdminEmail(email) || await isBuiltinKeyEmailAuthorized(email)) {
     return INTERNAL_WORKSPACE_KEY
   }
@@ -16,7 +22,7 @@ export async function getWorkspaceKeyForEmail(email: string | null | undefined):
 }
 
 export async function getWorkspaceContext(request: NextRequest) {
-  const { user, error } = await getAuthenticatedUser(request)
+  const { user, error } = await getAuthorizedUser(request)
   if (error || !user) {
     return { user: null, workspaceKey: null, error: error || 'Unauthorized' }
   }

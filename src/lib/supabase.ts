@@ -1,9 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
 import type { NextRequest } from 'next/server'
-import { isAllowedAppEmail } from './access-control'
-
-const fallbackSupabaseUrl = 'https://ytphdxldfifgafvypyuz.supabase.co'
-const fallbackSupabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0cGhkeGxkZmlmZ2FmdnlweXV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMzI1NzUsImV4cCI6MjA5MjYwODU3NX0.zDVi3v_D4IakcLFuyXVS8u1LTNerTIKcrIHv9dYDFfc'
 
 function isCompleteJwt(value: string | undefined) {
   if (!value) return false
@@ -11,17 +7,29 @@ function isCompleteJwt(value: string | undefined) {
   return parts.length === 3 && value.length > 120 && parts.every((part) => part.length > 10)
 }
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || fallbackSupabaseUrl
-const supabaseAnonKey = isCompleteJwt(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-  ? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  : fallbackSupabaseAnonKey
+function requireEnv(name: string) {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`)
+  }
+  return value
+}
+
+const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL')
+const supabaseAnonKey = (() => {
+  const value = requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
+  if (!isCompleteJwt(value)) {
+    throw new Error('NEXT_PUBLIC_SUPABASE_ANON_KEY is not a complete JWT')
+  }
+  return value
+})()
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 export function getServerSupabase() {
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
+    requireEnv('SUPABASE_SERVICE_ROLE_KEY'),
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
 }
@@ -54,17 +62,11 @@ export async function getAuthenticatedUser(request: NextRequest) {
   }
 
   const authClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || fallbackSupabaseUrl,
-    isCompleteJwt(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-      ? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      : fallbackSupabaseAnonKey,
+    requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
+    supabaseAnonKey,
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
   const { data, error } = await authClient.auth.getUser(token)
-
-  if (data.user && !isAllowedAppEmail(data.user.email)) {
-    return { user: null, error: 'Forbidden' }
-  }
 
   return {
     user: data.user,

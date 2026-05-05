@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { isAllowedAppEmail } from '@/lib/access-control'
 
 type Mode = 'login' | 'register'
 
@@ -32,16 +31,31 @@ export default function LoginPage() {
     return message
   }
 
+  const verifyAccess = async () => {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    if (!token) {
+      throw new Error('登录状态获取失败，请重新登录。')
+    }
+
+    const accessRes = await fetch('/api/auth/access', {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    })
+
+    if (!accessRes.ok) {
+      const payload = await accessRes.json().catch(() => null)
+      await supabase.auth.signOut()
+      throw new Error(payload?.error || '该邮箱未被管理员授权，请联系管理员开通后再使用。')
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setLoading(true)
 
     try {
-      if (!isAllowedAppEmail(email)) {
-        throw new Error('当前网站正在内测优化中，暂时只允许 links358p@gmail.com 登录。')
-      }
-
       if (mode === 'login') {
         const { error: err } = await supabase.auth.signInWithPassword({
           email,
@@ -65,6 +79,7 @@ export default function LoginPage() {
         })
         if (signInError) throw signInError
       }
+      await verifyAccess()
       router.push('/')
       router.refresh()
     } catch (err: unknown) {
@@ -87,9 +102,6 @@ export default function LoginPage() {
             <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-amber-100 to-yellow-50 text-5xl shadow-sm ring-1 ring-amber-200/70">🍌</div>
             <h1 className="text-4xl font-semibold tracking-tight text-slate-950">Nano Listing AI</h1>
             <p className="mt-3 text-lg text-slate-500">电商 AIGC 商品素材生成平台</p>
-            <p className="mt-5 inline-flex items-center rounded-full bg-slate-50 px-4 py-2 text-sm font-medium text-slate-500 ring-1 ring-slate-200">
-              当前仅开放指定账号使用。
-            </p>
           </div>
 
           <div className="mb-7 flex rounded-2xl bg-slate-100 p-1">
@@ -119,7 +131,7 @@ export default function LoginPage() {
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              注册（内测不可用）
+              注册
             </button>
           </div>
 
@@ -178,9 +190,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm font-medium text-amber-700">
-            未授权邮箱可以管理商品、Prompt 和 SEO 数据；AI 生成功能需要授权邮箱、验证内置 API 密码，或配置自己的 API Key。
-          </div>
         </div>
       </div>
     </div>

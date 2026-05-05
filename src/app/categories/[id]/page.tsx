@@ -31,7 +31,7 @@ export default function CategoryPromptPage() {
   const [uploading, setUploading] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const [aiNeed, setAiNeed] = useState('')
-  const [aiImageType, setAiImageType] = useState('main_1')
+  const [aiImageType, setAiImageType] = useState('main')
   const [aiStyle, setAiStyle] = useState('')
   const [aiPeople, setAiPeople] = useState('')
   const [aiScene, setAiScene] = useState('')
@@ -211,12 +211,12 @@ export default function CategoryPromptPage() {
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(250,204,21,0.14),transparent_30%),radial-gradient(circle_at_88%_8%,rgba(37,99,235,0.12),transparent_34%),linear-gradient(180deg,#ffffff_0%,#f8fafc_46%,#eef2f7_100%)]">
       <Navbar />
-      <main className="mx-auto max-w-[1500px] px-5 py-10 sm:px-8">
+      <main className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6">
         <Link href="/categories" className="mb-5 inline-flex rounded-2xl border border-slate-200 bg-white/85 px-4 py-2 text-sm font-semibold text-blue-600 shadow-sm hover:bg-white">返回类目列表</Link>
         <div className="mb-6 border-b border-slate-200 pb-6">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Category prompts</p>
           <h1 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">{category ? `${category.icon} ${category.name_zh}` : '类目指令'}</h1>
-          <p className="mt-2 text-sm text-slate-500">商品生成时会按顺序调用这里的指令。前 6 条建议对应主图、场景图、详情图。</p>
+          <p className="mt-2 text-sm text-slate-500">商品生成时会按图片角色调用这里的指令。建议至少维护主图、场景图、详情图 3 类基础指令。</p>
         </div>
 
         {error && <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">{error}</div>}

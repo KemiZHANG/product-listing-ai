@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { PRODUCT_LANGUAGES, type Category } from './types'
 import {
   buildSeoKeywordRuleName,
+  dedupeSeoKeywords,
   normalizeSeoKeywords,
   serializeSeoKeywordBank,
   type SeoKeyword,
@@ -18,42 +19,42 @@ const LANGUAGE_KEYWORD_TEMPLATES: Record<string, {
   forbidden: string[]
 }> = {
   en: {
-    longTail: ['best {base}', 'affordable {base}', '{base} online', '{base} for Shopee', '{base} Malaysia'],
+    longTail: ['{base} for daily use', '{base} online', '{base} for Shopee listing', '{base} Malaysia', 'affordable {base}'],
     attributes: ['premium', 'durable', 'lightweight', 'easy to use', 'compact', 'gentle'],
     scenes: ['daily use', 'home use', 'travel', 'office', 'gift'],
     audiences: ['women', 'men', 'family', 'kids', 'adults'],
-    forbidden: ['cure', 'treatment', 'medical grade', '100% original', 'cheapest', 'No.1'],
+    forbidden: ['cure', 'medical grade', 'guaranteed', '100% original', 'cheapest', 'No.1'],
   },
   ms: {
-    longTail: ['{base} terbaik', '{base} mampu milik', '{base} online', '{base} Shopee', '{base} Malaysia'],
+    longTail: ['{base} untuk kegunaan harian', '{base} online', '{base} Shopee', '{base} Malaysia', '{base} mampu milik'],
     attributes: ['berkualiti', 'tahan lama', 'ringan', 'mudah digunakan', 'praktikal', 'lembut'],
     scenes: ['kegunaan harian', 'rumah', 'perjalanan', 'pejabat', 'hadiah'],
     audiences: ['wanita', 'lelaki', 'keluarga', 'kanak-kanak', 'dewasa'],
     forbidden: ['sembuh', 'rawatan', 'gred perubatan', '100% original', 'termurah', 'No.1'],
   },
   fil: {
-    longTail: ['best {base}', 'affordable {base}', '{base} online', '{base} sa Shopee', '{base} for daily use'],
+    longTail: ['{base} for daily use', '{base} online', '{base} sa Shopee', 'affordable {base}', '{base} para sa bahay'],
     attributes: ['premium', 'matibay', 'magaan', 'madaling gamitin', 'compact', 'banayad'],
     scenes: ['araw-araw', 'bahay', 'biyahe', 'opisina', 'pangregalo'],
     audiences: ['babae', 'lalaki', 'pamilya', 'bata', 'adult'],
     forbidden: ['gamot', 'lunas', 'medical grade', '100% original', 'pinakamura', 'No.1'],
   },
   id: {
-    longTail: ['{base} terbaik', '{base} murah', '{base} online', '{base} Shopee', '{base} Malaysia'],
+    longTail: ['{base} untuk pemakaian harian', '{base} online', '{base} Shopee', '{base} Malaysia', '{base} praktis'],
     attributes: ['premium', 'awet', 'ringan', 'mudah digunakan', 'praktis', 'lembut'],
     scenes: ['harian', 'rumah', 'travel', 'kantor', 'hadiah'],
     audiences: ['wanita', 'pria', 'keluarga', 'anak', 'dewasa'],
     forbidden: ['menyembuhkan', 'pengobatan', 'kelas medis', '100% original', 'termurah', 'No.1'],
   },
   th: {
-    longTail: ['{base} คุณภาพดี', '{base} ราคาคุ้มค่า', '{base} ออนไลน์', '{base} Shopee', '{base} ใช้งานทุกวัน'],
-    attributes: ['พรีเมียม', 'ทนทาน', 'น้ำหนักเบา', 'ใช้งานง่าย', 'กะทัดรัด', 'อ่อนโยน'],
-    scenes: ['ใช้ประจำวัน', 'ใช้ในบ้าน', 'เดินทาง', 'ออฟฟิศ', 'ของขวัญ'],
+    longTail: ['{base} สำหรับใช้ประจำวัน', '{base} ออนไลน์', '{base} Shopee', '{base} สำหรับบ้าน', '{base} พกพาสะดวก'],
+    attributes: ['คุณภาพดี', 'ทนทาน', 'น้ำหนักเบา', 'ใช้งานง่าย', 'ขนาดกะทัดรัด', 'อ่อนโยน'],
+    scenes: ['ใช้ประจำวัน', 'ใช้ที่บ้าน', 'เดินทาง', 'สำนักงาน', 'ของขวัญ'],
     audiences: ['ผู้หญิง', 'ผู้ชาย', 'ครอบครัว', 'เด็ก', 'ผู้ใหญ่'],
-    forbidden: ['รักษาโรค', 'การรักษา', 'เกรดทางการแพทย์', '100% original', 'ถูกที่สุด', 'No.1'],
+    forbidden: ['รักษา', 'ทางการแพทย์', 'รับประกันผล', '100% original', 'ถูกที่สุด', 'No.1'],
   },
   vi: {
-    longTail: ['{base} tốt nhất', '{base} giá tốt', '{base} online', '{base} Shopee', '{base} dùng hằng ngày'],
+    longTail: ['{base} dùng hằng ngày', '{base} online', '{base} Shopee', '{base} cho gia đình', '{base} tiện dụng'],
     attributes: ['cao cấp', 'bền', 'nhẹ', 'dễ sử dụng', 'nhỏ gọn', 'dịu nhẹ'],
     scenes: ['dùng hằng ngày', 'ở nhà', 'du lịch', 'văn phòng', 'quà tặng'],
     audiences: ['phụ nữ', 'nam giới', 'gia đình', 'trẻ em', 'người lớn'],
@@ -62,7 +63,7 @@ const LANGUAGE_KEYWORD_TEMPLATES: Record<string, {
 }
 
 function keywordId(type: SeoKeywordType, value: string) {
-  return `${type}-${value.toLowerCase().replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '')}`
+  return `${type}-${value.toLowerCase().replace(/[^a-z0-9\u00c0-\u024f\u0e00-\u0e7f]+/gi, '-').replace(/^-|-$/g, '')}`
 }
 
 function cleanBase(category: CategoryLike) {
@@ -97,15 +98,7 @@ function makeKeyword(type: SeoKeywordType, keyword: string, priority: number, no
 }
 
 export function mergeSeoKeywords(existing: SeoKeyword[], incoming: SeoKeyword[]) {
-  const merged = new Map<string, SeoKeyword>()
-  for (const item of normalizeSeoKeywords([...existing, ...incoming])) {
-    const key = `${item.type}:${item.keyword.trim().toLowerCase()}`
-    const current = merged.get(key)
-    if (!current || item.priority > current.priority) {
-      merged.set(key, item)
-    }
-  }
-  return Array.from(merged.values())
+  return dedupeSeoKeywords(normalizeSeoKeywords([...existing, ...incoming]))
 }
 
 export function buildDefaultSeoKeywords(category: CategoryLike, languageCode: string) {

@@ -2,26 +2,28 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSupabase } from '@/lib/supabase'
 import { ensurePresetCategoriesForUser } from '@/lib/preset-seed'
 import { getWorkspaceKeyForEmail } from '@/lib/workspace'
-import { isAllowedAppEmail } from '@/lib/access-control'
+import { APP_AUTH_ERROR, isAppEmailAuthorized } from '@/lib/app-auth'
+import { normalizeEmail } from '@/lib/admin'
 
 export async function POST(request: NextRequest) {
   const { email, password } = await request.json()
+  const normalizedEmail = normalizeEmail(email)
 
-  if (!email || !password) {
+  if (!normalizedEmail || !password) {
     return NextResponse.json({ error: '请输入邮箱和密码' }, { status: 400 })
-  }
-
-  if (!isAllowedAppEmail(email)) {
-    return NextResponse.json({ error: '当前网站正在内测优化中，暂时只允许 links358p@gmail.com 登录。' }, { status: 403 })
   }
 
   if (password.length < 6) {
     return NextResponse.json({ error: '密码至少需要 6 位' }, { status: 400 })
   }
 
+  if (!await isAppEmailAuthorized(normalizedEmail)) {
+    return NextResponse.json({ error: APP_AUTH_ERROR }, { status: 403 })
+  }
+
   const supabase = getServerSupabase()
   const { data, error } = await supabase.auth.admin.createUser({
-    email,
+    email: normalizedEmail,
     password,
     email_confirm: true,
   })
