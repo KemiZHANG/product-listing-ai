@@ -1,164 +1,265 @@
-# Nano Listing AI
+# DLM AI
 
-AI-powered ecommerce listing generation workflow built with Next.js, Supabase, Gemini image/text generation, and Vercel.
+## 中文版说明
 
-Nano Listing AI is designed for cross-border ecommerce listing work such as Shopee and TikTok Shop. It helps teams manage products, category prompts, platform rules, multilingual copies, generated images, and employee listing progress in one place.
+### 项目简介
 
-## Live Demo
+`DLM AI` 是一个电商商品工作台，支持商品管理、类目 Prompt、商品标题与描述生成、图片生成、图片重生、SEO 关键词库、规则库和上品状态管理。
 
-Public resume/demo edition:
+这个仓库当前服务两套站点：
 
-[https://nano-banana-web-resume.vercel.app](https://nano-banana-web-resume.vercel.app)
+- 公司内部版：仅授权邮箱可注册、登录和使用
+- 简历公开版：允许公开注册，使用独立 Supabase 和独立 Vercel 项目
 
-Internal company edition is deployed separately with authorization-based access control.
+两套站点共用一份代码，通过环境变量切换 edition。
 
-## Core Features
+### 核心能力
 
-- Product master table with SKU, source title, source description, category, selling points, custom attributes, and reference images.
-- Excel / CSV batch import with automatic field mapping.
-- Category prompt management for ecommerce image generation.
-- Multilingual product copy generation.
-- Per-copy image generation selection.
-- Employee workbench for listing status, store name, notes, and follow-up actions.
-- Batch operations for outputs.
-- Supabase-backed auth, storage, and persistence.
-- Vercel deployment with Next.js App Router APIs.
+- 商品创建、编辑、导入
+- 每个语言副本独立配置图片类型
+- 三图模型：`main`、`scene`、`detail`
+- 标题、描述、图片生成
+- 图片失败重试、单张重生、待确认新图审核
+- SEO 关键词库管理
+- Rules 规则库管理
+- 公司版授权邮箱控制
 
-## Image Generation Model
+### 环境划分
 
-The app now uses a 3-role image workflow instead of a fixed 6-image workflow:
+公司内部版：
 
-- `main`: main product image
-- `scene`: lifestyle / usage scene image
-- `detail`: product detail image
+- `APP_EDITION=company`
+- 使用公司 Supabase
+- 使用公司 Vercel
+- 仅授权邮箱可访问
 
-Each language copy can independently choose which image roles to generate.
+简历公开版：
 
-Examples:
+- `APP_EDITION=resume`
+- 使用简历版 Supabase
+- 使用简历版 Vercel
+- 允许公开注册
 
-- English 1: `main`
-- English 2: `main + detail`
-- Malay 1: `scene`
-
-If a product is configured with `English count = 2`, the system creates two separate copies such as `English 1` and `English 2`, each with its own selected image plan.
-
-## Editions
-
-This repository supports two deployment editions through environment variables.
-
-### Company Edition
-
-Set:
+### 关键环境变量
 
 ```bash
-APP_EDITION=company
-NEXT_PUBLIC_APP_EDITION=company
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+NEXT_PUBLIC_APP_URL=
+APP_EDITION=
+NEXT_PUBLIC_APP_EDITION=
+BUILTIN_GEMINI_API_KEY=
+BUILTIN_KEY_ACCESS_PASSWORD=
 ```
 
-Behavior:
-
-- Registration and login are authorization-based.
-- Only approved internal emails can access and use the system.
-- Removing authorization blocks future login.
-
-### Resume Edition
-
-Set:
+### 本地运行
 
 ```bash
-APP_EDITION=resume
-NEXT_PUBLIC_APP_EDITION=resume
+npm install
+npm run dev
+npm run build
 ```
 
-Behavior:
+### 数据库 SQL
 
-- Public registration is enabled.
-- AI generation still requires either:
-  - the built-in API password, or
-  - the user's own API key.
-
-## Main Pages
-
-- `/login`: sign in
-- `/`: products workbench
-- `/categories`: category prompt management
-- `/categories/[id]`: category prompt detail
-- `/product-outputs`: generated listing outputs
-- `/product-outputs/[id]`: output detail page
-- `/rules`: platform and compliance rules
-- `/settings`: model and API settings
-- `/dashboard`: operations dashboard
-
-## Generation Logic
-
-1. Create or import products into the product master table.
-2. Select a category for the product.
-3. Upload one or more reference images.
-4. Configure language copy counts.
-5. Configure image-role selection for each copy.
-6. The system merges product data, category prompts, copy plan, language, and active rules into generation prompts.
-7. Gemini generates title and description.
-8. The system creates only the selected image tasks for each copy.
-9. Outputs are grouped by SKU, language, copy index, and generation time.
-
-## Database Setup
-
-Run these SQL files in Supabase SQL Editor for a fresh environment:
+新环境需要执行：
 
 ```bash
 supabase/schema.sql
-supabase/builtin_key_authorizations.sql
 supabase/product_workflow.sql
+supabase/builtin_key_authorizations.sql
+supabase/20260503_image_regeneration_review.sql
 supabase/20260503_workbench_quality.sql
 ```
 
-Optional hardening, recommended after core verification:
+暂时不要执行：
 
 ```bash
 supabase/20260503_workspace_rls_hardening.sql
 ```
 
-## Local Development
+### 参考数据同步
+
+当公司版新增类目、Prompt、Rules、SEO 词库后，可以把演示需要的参考数据同步到简历版：
+
+```bash
+npm run sync:resume-reference-data
+```
+
+### 历史 6 图数据清理
+
+仓库内置了旧数据清理脚本，可用于把历史 6 图痕迹收口到 3 图模型：
+
+```bash
+npm run cleanup:legacy-six-image-data -- --mode=tasks-only
+```
+
+常用参数：
+
+- `--mode=tasks-only`
+- `--mode=tasks-and-prompts`
+- `--workspace=all|internal|external`
+- `--env-file=...`
+- `--backup-dir=...`
+- `--execute`
+
+默认先 dry-run，并输出备份。
+
+### 稳定性说明
+
+当前代码已经补了这些基础能力：
+
+- 公司版登录后持续校验授权状态
+- 失去授权后前端会强制退回登录页
+- 列表页会在聚焦、切回标签页和固定间隔时刷新数据
+- 图片 signed URL 统一走服务端接口，降低多人访问时的加载失败概率
+- 商品页、副本页、Rules 页已经接入 Supabase Realtime 自动刷新
+
+### 部署流程
+
+```bash
+1. 在主仓库完成代码修改
+2. 运行 npm run build
+3. 同步简历版部署目录
+4. 部署公司版 Vercel
+5. 部署简历版 Vercel
+6. 验证授权、类目、SEO、图片加载和副本生成
+```
+
+### 交接文档
+
+- `docs/HANDOFF.md`
+
+---
+
+## English Version
+
+### Overview
+
+`DLM AI` is an ecommerce listing workspace built with Next.js, Supabase, Gemini, OpenAI image generation, and Vercel. It supports product management, category prompt management, title and description generation, image generation, image regeneration review, SEO keyword banks, reusable rule templates, and listing status operations.
+
+This repository currently serves two separate deployments:
+
+- Company edition: authorized internal access only
+- Resume edition: public registration with isolated Supabase and Vercel projects
+
+Both editions share one codebase and switch behavior through environment variables.
+
+### Core Features
+
+- Product creation, editing, and import
+- Per-copy image role selection for each language copy
+- Three-image model: `main`, `scene`, `detail`
+- AI title, description, and image generation
+- Failed image retry, single-image regeneration, pending-image review
+- SEO keyword bank management
+- Rules library management
+- Company-only authorization workflow
+
+### Editions
+
+Company edition:
+
+- `APP_EDITION=company`
+- Uses the company Supabase project
+- Uses the company Vercel project
+- Authorized emails only
+
+Resume edition:
+
+- `APP_EDITION=resume`
+- Uses the resume Supabase project
+- Uses the resume Vercel project
+- Public registration enabled
+
+### Environment Variables
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+NEXT_PUBLIC_APP_URL=
+APP_EDITION=
+NEXT_PUBLIC_APP_EDITION=
+BUILTIN_GEMINI_API_KEY=
+BUILTIN_KEY_ACCESS_PASSWORD=
+```
+
+### Local Development
 
 ```bash
 npm install
 npm run dev
+npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+### Required SQL
 
-Create `.env.local`:
+Run these files for a fresh environment:
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=<your-supabase-project-url>
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-supabase-anon-key>
-SUPABASE_SERVICE_ROLE_KEY=<your-supabase-service-role-key>
-BUILTIN_GEMINI_API_KEY=<optional-gemini-api-key>
-BUILTIN_KEY_ACCESS_PASSWORD=<optional-built-in-password>
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-APP_EDITION=company
-NEXT_PUBLIC_APP_EDITION=company
+supabase/schema.sql
+supabase/product_workflow.sql
+supabase/builtin_key_authorizations.sql
+supabase/20260503_image_regeneration_review.sql
+supabase/20260503_workbench_quality.sql
 ```
 
-## Deployment
-
-Recommended deployment model:
-
-- One codebase
-- Two Vercel projects
-- Company edition and resume edition split by environment variables
-
-Required environment variables:
+Do not run yet:
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=<your-supabase-project-url>
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-supabase-anon-key>
-SUPABASE_SERVICE_ROLE_KEY=<your-supabase-service-role-key>
-BUILTIN_GEMINI_API_KEY=<optional-gemini-api-key>
-BUILTIN_KEY_ACCESS_PASSWORD=<optional-built-in-password>
-NEXT_PUBLIC_APP_URL=<your-production-url>
-APP_EDITION=<company|resume>
-NEXT_PUBLIC_APP_EDITION=<company|resume>
+supabase/20260503_workspace_rls_hardening.sql
 ```
 
-After changing environment variables or schema, redeploy the project on Vercel.
+### Reference Data Sync
+
+When the company edition receives new categories, prompts, rules, or SEO banks, sync the required reference data to the resume edition with:
+
+```bash
+npm run sync:resume-reference-data
+```
+
+### Legacy 6-Image Cleanup
+
+The repository includes a cleanup script for legacy 6-image-era data:
+
+```bash
+npm run cleanup:legacy-six-image-data -- --mode=tasks-only
+```
+
+Useful options:
+
+- `--mode=tasks-only`
+- `--mode=tasks-and-prompts`
+- `--workspace=all|internal|external`
+- `--env-file=...`
+- `--backup-dir=...`
+- `--execute`
+
+The default behavior is dry-run with backup output first.
+
+### Stability Notes
+
+The current codebase already includes:
+
+- ongoing company-edition access checks after login
+- forced client sign-out when authorization is revoked
+- focus, visibility, and interval-based data refresh on key list pages
+- server-backed signed URL generation for more reliable shared image access
+- Supabase Realtime refresh on products, outputs, and rules pages
+
+### Deployment Flow
+
+```bash
+1. Finish code changes in the main repository
+2. Run npm run build
+3. Sync the resume deployment mirror
+4. Deploy the company Vercel project
+5. Deploy the resume Vercel project
+6. Verify auth, categories, SEO, image loading, and copy generation
+```
+
+### Handoff
+
+- `docs/HANDOFF.md`
