@@ -1,16 +1,16 @@
-# DLM AI
+# Product Listing AI
 
 ## 中文版
 
-### DLM AI 是什么
+### Product Listing AI 是什么
 
-`DLM AI` 是一个面向电商运营场景的 AI 商品工作台，用来把商品整理、文案生成、图片生成、SEO 关键词管理和规则管理放到同一个系统里完成。
+`Product Listing AI` 是一个面向电商运营场景的 AI 商品工作台，用来把商品整理、文案生成、图片生成、SEO 关键词管理和规则管理放到同一个系统里完成。
 
-它适合需要长期处理商品资料、重复生成商品标题与描述、制作商品图、维护关键词库和统一运营规范的使用场景。相比把这些工作分散在表格、聊天工具和多个 AI 页面里，`DLM AI` 更强调流程统一、结果可追踪和多人协作。
+它适合需要长期处理商品资料、重复生成商品标题与描述、制作商品图、维护关键词库和统一运营规范的使用场景。相比把这些工作分散在表格、聊天工具和多个 AI 页面里，`Product Listing AI` 更强调流程统一、结果可追踪和多人协作。
 
 ### 在线体验
 
-- [https://dlm-ai.vercel.app](https://dlm-ai.vercel.app)
+- [https://product-listing-ai.vercel.app](https://product-listing-ai.vercel.app)
 
 ### 主要功能
 
@@ -24,7 +24,7 @@
 
 ### 内部逻辑
 
-`DLM AI` 的核心不是“单次调用一个模型”，而是把商品生成过程做成一个可重复执行的工作流。
+`Product Listing AI` 的核心不是“单次调用一个模型”，而是把商品生成过程做成一个可重复执行的工作流。
 
 1. 用户先录入或导入商品资料，包括 SKU、标题、描述、类目、卖点和参考图。
 2. 系统根据商品所属类目，读取对应的 Prompt 配置、SEO 关键词和规则约束。
@@ -102,15 +102,15 @@ BUILTIN_KEY_ACCESS_PASSWORD=
 
 ## English Version
 
-### What DLM AI Is
+### What Product Listing AI Is
 
-`DLM AI` is an AI-powered ecommerce listing workspace designed to manage product data, generate copy, create images, maintain SEO keyword banks, and organize reusable operating rules in one system.
+`Product Listing AI` is an AI-powered ecommerce listing workspace designed to manage product data, generate copy, create images, maintain SEO keyword banks, and organize reusable operating rules in one system.
 
-It is built for real product operations work where teams repeatedly prepare listings, refine titles and descriptions, generate visual assets, and keep content quality consistent over time. Instead of scattering the workflow across spreadsheets, chat tools, and isolated AI prompts, `DLM AI` turns it into a structured operating workspace.
+It is built for real product operations work where teams repeatedly prepare listings, refine titles and descriptions, generate visual assets, and keep content quality consistent over time. Instead of scattering the workflow across spreadsheets, chat tools, and isolated AI prompts, `Product Listing AI` turns it into a structured operating workspace.
 
 ### Live Site
 
-- [https://dlm-ai.vercel.app](https://dlm-ai.vercel.app)
+- [https://product-listing-ai.vercel.app](https://product-listing-ai.vercel.app)
 
 ### Core Features
 
@@ -124,7 +124,7 @@ It is built for real product operations work where teams repeatedly prepare list
 
 ### Internal Logic
 
-The core value of `DLM AI` is that it turns AI generation into a repeatable product workflow rather than a one-off prompt.
+The core value of `Product Listing AI` is that it turns AI generation into a repeatable product workflow rather than a one-off prompt.
 
 1. Users create or import product records with SKU, title, description, category, selling points, and reference images.
 2. The system loads the related category prompts, SEO keyword context, and active rules.
@@ -160,7 +160,7 @@ This project combines product thinking with engineering discipline:
 
 ### Real-World Value
 
-In practical use, `DLM AI` helps individuals and teams:
+In practical use, `Product Listing AI` helps individuals and teams:
 
 - spend less time manually writing listing copy
 - reduce inconsistency across product records and generated outputs
