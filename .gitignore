@@ -34,6 +34,7 @@ yarn-error.log*
 dev-server.log
 .codex/
 design-system/
+.tmp-chrome-readme/
 
 # typescript
 *.tsbuildinfo

@@ -80,16 +80,35 @@ flowchart LR
 
 它适合商品内容运营、跨境电商上品、商品目录整理、AI 辅助 Listing 生成和多语言商品资料处理等场景。
 
-### 界面截图建议
+### 界面截图
 
-建议在 `docs/screenshots/` 中补充以下截图，让 GitHub 首页更直观：
+#### 商品素材生成工作台
 
-- `products.png`：商品管理与新建商品页面。
-- `categories.png`：类目 Prompt 与参考图管理页面。
-- `product-outputs.png`：副本输出、图片状态和批量操作页面。
-- `output-detail.png`：单个副本详情、图片重生和候选图确认页面。
-- `seo-keywords.png`：SEO 关键词库页面。
-- `rules.png`：规则库页面。
+![商品素材生成工作台](docs/screenshots/products.png)
+
+#### 类目 Prompt 管理
+
+![类目 Prompt 管理](docs/screenshots/categories.png)
+
+#### 商品副本输出工作台
+
+![商品副本输出工作台](docs/screenshots/product-outputs.png)
+
+#### 图片输出页面
+
+![图片输出页面](docs/screenshots/image-outputs.png)
+
+#### SEO 关键词库
+
+![SEO 关键词库](docs/screenshots/seo-keywords.png)
+
+#### 规则库
+
+![规则库](docs/screenshots/rules.png)
+
+#### 系统设置
+
+![系统设置](docs/screenshots/settings.png)
 
 ### 技术栈
 
@@ -135,7 +154,6 @@ docs                     项目文档与截图资料
 
 ### 后续优化方向
 
-- 补充 GitHub README 实际界面截图。
 - 将剩余页面文案进一步集中到统一 i18n 字典。
 - 增加更完整的端到端测试。
 - 接入更正式的错误监控和性能观测。
@@ -222,16 +240,35 @@ In ecommerce operations, product content often needs to be collected, generated,
 
 It is useful for ecommerce content operations, cross-border marketplace listing, catalog preparation, AI-assisted listing creation, and multilingual product data workflows.
 
-### Screenshot Suggestions
+### Screenshots
 
-Recommended screenshots for `docs/screenshots/`:
+#### Product Content Workspace
 
-- `products.png`: product management and product creation.
-- `categories.png`: category prompts and reference images.
-- `product-outputs.png`: output workbench, image status, and batch actions.
-- `output-detail.png`: output detail page, image regeneration, and candidate confirmation.
-- `seo-keywords.png`: SEO keyword bank.
-- `rules.png`: reusable rules library.
+![Product Content Workspace](docs/screenshots/products.png)
+
+#### Category Prompt Management
+
+![Category Prompt Management](docs/screenshots/categories.png)
+
+#### Product Output Workbench
+
+![Product Output Workbench](docs/screenshots/product-outputs.png)
+
+#### Image Outputs
+
+![Image Outputs](docs/screenshots/image-outputs.png)
+
+#### SEO Keyword Bank
+
+![SEO Keyword Bank](docs/screenshots/seo-keywords.png)
+
+#### Rules Library
+
+![Rules Library](docs/screenshots/rules.png)
+
+#### Settings
+
+![Settings](docs/screenshots/settings.png)
 
 ### Tech Stack
 
@@ -277,7 +314,6 @@ docs                     Project documentation and screenshot assets
 
 ### Future Improvements
 
-- Add real screenshots to the GitHub README.
 - Move remaining page copy into the shared i18n dictionary.
 - Add broader end-to-end tests.
 - Connect formal error monitoring and performance observability.
