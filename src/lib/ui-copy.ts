@@ -17,15 +17,15 @@ export function getPaginationCopy(language: UiLanguage) {
 
 export function getNavbarCopy(language: UiLanguage) {
   return {
-    dashboard: language === 'en' ? 'Dashboard' : '概览',
-    products: language === 'en' ? 'Products' : '商品',
-    categories: language === 'en' ? 'Categories' : '类目',
-    productOutputs: language === 'en' ? 'Product Outputs' : '副本输出',
-    imageOutputs: language === 'en' ? 'Image Outputs' : '图片输出',
-    seoKeywords: language === 'en' ? 'SEO Keywords' : 'SEO 关键词',
-    rules: language === 'en' ? 'Rules' : '规则',
-    settings: language === 'en' ? 'Settings' : '设置',
-    admin: language === 'en' ? 'Admin' : '管理',
+    dashboard: language === 'en' ? 'Dashboard' : '运营概览',
+    products: language === 'en' ? 'Initial Products' : '初始商品',
+    categories: language === 'en' ? 'Category Prompts' : '类目指令',
+    productOutputs: language === 'en' ? 'Product Copy Outputs' : '商品副本输出',
+    imageOutputs: language === 'en' ? 'Image Outputs' : '图片生成输出',
+    seoKeywords: language === 'en' ? 'SEO Keywords' : 'SEO 关键词库',
+    rules: language === 'en' ? 'Rules' : '规则模板',
+    settings: language === 'en' ? 'Settings' : '系统设置',
+    admin: language === 'en' ? 'Admin' : '员工授权',
     logout: language === 'en' ? 'Logout' : '退出',
   }
 }

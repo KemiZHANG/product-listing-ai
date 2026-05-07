@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { isPrimaryAdminEmail } from '@/lib/admin'
-import { getAuthenticatedUser, getServerSupabase } from '@/lib/supabase'
+import { isAdminEmail, isPrimaryAdminEmail } from '@/lib/admin'
+import { getAuthorizedUser } from '@/lib/app-auth'
+import { getServerSupabase } from '@/lib/supabase'
 
 async function requireAdmin(request: NextRequest) {
-  const { user, error } = await getAuthenticatedUser(request)
+  const { user, error } = await getAuthorizedUser(request)
   if (error || !user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: error || 'Unauthorized' }, { status: 403 })
   }
 
-  if (!isPrimaryAdminEmail(user.email)) {
+  if (!isAdminEmail(user.email)) {
     return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
   }
 
@@ -39,6 +40,20 @@ export async function PATCH(
   }
 
   const supabase = getServerSupabase()
+  const { data: existing, error: existingError } = await supabase
+    .from('builtin_key_authorizations')
+    .select('email')
+    .eq('id', params.id)
+    .single()
+
+  if (existingError) {
+    return NextResponse.json({ error: existingError.message }, { status: 500 })
+  }
+
+  if (isPrimaryAdminEmail(existing.email) && updateData.active === false) {
+    return NextResponse.json({ error: 'Primary admin cannot be revoked.' }, { status: 403 })
+  }
+
   const { data, error } = await supabase
     .from('builtin_key_authorizations')
     .update(updateData)
@@ -51,4 +66,38 @@ export async function PATCH(
   }
 
   return NextResponse.json({ authorization: data })
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const adminError = await requireAdmin(request)
+  if (adminError) return adminError
+
+  const supabase = getServerSupabase()
+  const { data: existing, error: existingError } = await supabase
+    .from('builtin_key_authorizations')
+    .select('email')
+    .eq('id', params.id)
+    .single()
+
+  if (existingError) {
+    return NextResponse.json({ error: existingError.message }, { status: 500 })
+  }
+
+  if (isPrimaryAdminEmail(existing.email)) {
+    return NextResponse.json({ error: 'Primary admin cannot be deleted.' }, { status: 403 })
+  }
+
+  const { error } = await supabase
+    .from('builtin_key_authorizations')
+    .delete()
+    .eq('id', params.id)
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ ok: true })
 }

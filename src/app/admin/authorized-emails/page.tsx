@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import { apiFetch } from '@/lib/api'
-import { isPrimaryAdminEmail } from '@/lib/admin'
+import { isAdminEmail, isPrimaryAdminEmail } from '@/lib/admin'
 import { supabase } from '@/lib/supabase'
 
 type Authorization = {
@@ -25,6 +25,7 @@ export default function AuthorizedEmailsPage() {
   const [note, setNote] = useState('')
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [saving, setSaving] = useState(false)
+  const [pendingId, setPendingId] = useState<string | null>(null)
 
   const fetchAuthorizations = useCallback(async () => {
     const res = await apiFetch('/api/admin/authorized-emails')
@@ -52,7 +53,7 @@ export default function AuthorizedEmailsPage() {
         return
       }
 
-      if (!isPrimaryAdminEmail(userEmail)) {
+      if (!isAdminEmail(userEmail)) {
         router.replace('/')
         return
       }
@@ -64,7 +65,7 @@ export default function AuthorizedEmailsPage() {
 
   const handleAdd = async () => {
     if (!email.trim()) {
-      setMessage({ type: 'error', text: '请输入邮箱。' })
+      setMessage({ type: 'error', text: '请输入员工邮箱。' })
       return
     }
 
@@ -78,7 +79,7 @@ export default function AuthorizedEmailsPage() {
       })
       const data = await res.json()
       if (!res.ok) {
-        setMessage({ type: 'error', text: data.error || '保存失败' })
+        setMessage({ type: 'error', text: data.error || '保存授权失败' })
         return
       }
 
@@ -92,20 +93,25 @@ export default function AuthorizedEmailsPage() {
   }
 
   const handleToggle = async (item: Authorization, active: boolean) => {
+    setPendingId(item.id)
     setMessage(null)
-    const res = await apiFetch(`/api/admin/authorized-emails/${item.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ active }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      setMessage({ type: 'error', text: data.error || '更新失败' })
-      return
-    }
+    try {
+      const res = await apiFetch(`/api/admin/authorized-emails/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setMessage({ type: 'error', text: data.error || '更新授权失败' })
+        return
+      }
 
-    setMessage({ type: 'success', text: active ? '授权已恢复。' : '授权已取消。' })
-    await fetchAuthorizations()
+      setMessage({ type: 'success', text: active ? '授权已恢复。' : '授权已取消。' })
+      await fetchAuthorizations()
+    } finally {
+      setPendingId(null)
+    }
   }
 
   const handleSaveNote = async (item: Authorization, nextNote: string) => {
@@ -124,6 +130,29 @@ export default function AuthorizedEmailsPage() {
     await fetchAuthorizations()
   }
 
+  const handleDelete = async (item: Authorization) => {
+    const confirmed = window.confirm(`确定要删除 ${item.email} 吗？删除后会同时取消授权，该邮箱之后不能登录公司站。`)
+    if (!confirmed) return
+
+    setPendingId(item.id)
+    setMessage(null)
+    try {
+      const res = await apiFetch(`/api/admin/authorized-emails/${item.id}`, {
+        method: 'DELETE',
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setMessage({ type: 'error', text: data.error || '删除邮箱失败' })
+        return
+      }
+
+      setMessage({ type: 'success', text: '员工邮箱已删除，授权也已取消。' })
+      await fetchAuthorizations()
+    } finally {
+      setPendingId(null)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -136,23 +165,27 @@ export default function AuthorizedEmailsPage() {
     <div className="min-h-screen bg-gray-50">
       <Navbar />
 
-      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-6">
-          <h2 className="text-xl font-semibold text-gray-900">内置 API 授权邮箱</h2>
-          <p className="mt-1 text-sm text-gray-500">
-            被授权邮箱登录后可以免密码使用内置 Gemini API。取消授权会让该邮箱后续任务无法继续免密码使用内置 API。
+          <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Admin Access</p>
+          <h2 className="mt-2 text-3xl font-semibold tracking-tight text-gray-950">员工登录授权管理</h2>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-500">
+            只有这里处于“已授权”的邮箱才能注册、登录和使用公司站。删除邮箱会同时取消授权；
+            员工离职后建议直接删除。主账号 links358p@gmail.com 是最高权限账号，不能被取消授权或删除。
           </p>
         </div>
 
         {message && (
-          <div className={`mb-4 rounded-md p-3 text-sm ${
-            message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+          <div className={`mb-4 rounded-2xl border p-4 text-sm font-medium ${
+            message.type === 'success'
+              ? 'border-green-200 bg-green-50 text-green-700'
+              : 'border-red-200 bg-red-50 text-red-700'
           }`}>
             {message.text}
           </div>
         )}
 
-        <div className="mb-6 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <h3 className="mb-4 text-base font-semibold text-gray-900">添加或恢复授权</h3>
           <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
             <input
@@ -160,25 +193,25 @@ export default function AuthorizedEmailsPage() {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="employee@company.com"
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="rounded-xl border border-gray-300 px-3 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
             <input
               value={note}
               onChange={(event) => setNote(event.target.value)}
-              placeholder="备注，例如姓名 / 部门"
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              placeholder="备注，例如姓名 / 部门 / 职位"
+              className="rounded-xl border border-gray-300 px-3 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
             <button
               onClick={handleAdd}
               disabled={saving}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+              className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
             >
               {saving ? '保存中...' : '保存授权'}
             </button>
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
@@ -190,49 +223,74 @@ export default function AuthorizedEmailsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 bg-white">
-              {authorizations.map((item) => (
-                <tr key={item.id}>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{item.email}</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
-                      item.active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {item.active ? '已授权' : '已取消'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <input
-                      defaultValue={item.note || ''}
-                      onBlur={(event) => {
-                        if (event.target.value !== (item.note || '')) {
-                          handleSaveNote(item, event.target.value)
-                        }
-                      }}
-                      className="w-full rounded-md border border-gray-200 px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {new Date(item.updated_at).toLocaleString('zh-CN')}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {item.active ? (
-                      <button
-                        onClick={() => handleToggle(item, false)}
-                        className="rounded-md bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
-                      >
-                        取消授权
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleToggle(item, true)}
-                        className="rounded-md bg-green-50 px-3 py-1.5 text-sm font-medium text-green-700 transition-colors hover:bg-green-100"
-                      >
-                        恢复授权
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {authorizations.map((item) => {
+                const primary = isPrimaryAdminEmail(item.email)
+                const disabled = pendingId === item.id
+
+                return (
+                  <tr key={item.id}>
+                    <td className="px-4 py-4 text-sm font-semibold text-gray-900">
+                      <div>{item.email}</div>
+                      {primary && <div className="mt-1 text-xs font-medium text-blue-600">最高权限主账号</div>}
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                        item.active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {item.active ? '已授权' : '已取消'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <input
+                        defaultValue={item.note || ''}
+                        onBlur={(event) => {
+                          if (event.target.value !== (item.note || '')) {
+                            handleSaveNote(item, event.target.value)
+                          }
+                        }}
+                        className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                      />
+                    </td>
+                    <td className="px-4 py-4 text-sm text-gray-500">
+                      {new Date(item.updated_at).toLocaleString('zh-CN')}
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex justify-end gap-2">
+                        {primary ? (
+                          <span className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
+                            受保护
+                          </span>
+                        ) : item.active ? (
+                          <button
+                            onClick={() => handleToggle(item, false)}
+                            disabled={disabled}
+                            className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-50"
+                          >
+                            取消授权
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleToggle(item, true)}
+                            disabled={disabled}
+                            className="rounded-xl bg-green-50 px-3 py-2 text-sm font-semibold text-green-700 transition-colors hover:bg-green-100 disabled:opacity-50"
+                          >
+                            恢复授权
+                          </button>
+                        )}
+                        {!primary && (
+                          <button
+                            onClick={() => handleDelete(item)}
+                            disabled={disabled}
+                            className="rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+                          >
+                            删除邮箱
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
 
               {authorizations.length === 0 && (
                 <tr>
