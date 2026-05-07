@@ -46,15 +46,15 @@ export default function Navbar() {
   }
 
   return (
-    <nav className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/82 shadow-[0_1px_0_rgba(15,23,42,0.04),0_18px_54px_rgba(15,23,42,0.08)] backdrop-blur-2xl">
-      <div className="mx-auto flex min-h-20 max-w-[1640px] items-center justify-between gap-4 px-5 py-3 sm:px-8">
+    <nav className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/78 shadow-[0_18px_70px_rgba(15,23,42,0.06)] backdrop-blur-2xl">
+      <div className="mx-auto flex h-16 max-w-[1600px] items-center justify-between px-5 sm:px-8">
         <div className="flex min-w-0 items-center gap-4">
-          <Link href="/" className="group flex shrink-0 items-center gap-3 rounded-2xl px-1.5 py-1 text-lg font-semibold text-slate-950 transition-colors hover:bg-slate-100/70">
+          <Link href="/" className="group flex shrink-0 items-center gap-3 text-lg font-semibold text-slate-950">
             <BrandMark />
-            <span className="whitespace-nowrap tracking-tight">{brand.appName}</span>
+            <span className="tracking-tight">{brand.appName}</span>
           </Link>
 
-          <div className="hidden items-center gap-1 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-1 shadow-inner shadow-slate-200/50 lg:flex">
+          <div className="hidden items-center gap-1.5 lg:flex">
             {visibleLinks.map((link) => {
               const isActive = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href)
               return (
@@ -63,12 +63,12 @@ export default function Navbar() {
                   href={link.href}
                   className={`relative rounded-xl px-2.5 py-2 text-xs font-semibold transition-all duration-200 xl:px-3 xl:text-sm ${
                     isActive
-                      ? 'bg-slate-950 text-white shadow-[0_10px_24px_rgba(15,23,42,0.18)]'
-                      : 'text-slate-500 hover:bg-white hover:text-slate-950 hover:shadow-sm'
+                      ? 'bg-slate-950 text-white shadow-lg shadow-slate-950/15'
+                      : 'text-slate-500 hover:bg-slate-100/80 hover:text-slate-950'
                   }`}
                 >
                   {link.label}
-                  {isActive && <span className="absolute -bottom-[14px] left-4 right-4 h-1 rounded-full bg-blue-600" />}
+                  {isActive && <span className="absolute -bottom-[15px] left-4 right-4 h-1 rounded-full bg-sky-600" />}
                 </Link>
               )
             })}
@@ -78,20 +78,20 @@ export default function Navbar() {
         <div className="flex shrink-0 items-center gap-3">
           <LanguageToggle />
           {userEmail && (
-            <span className="hidden max-w-[260px] truncate rounded-2xl border border-slate-200 bg-white/88 px-4 py-2.5 text-sm font-medium text-slate-600 shadow-sm xl:inline">
+            <span className="hidden max-w-[260px] truncate rounded-2xl border border-slate-200 bg-white/80 px-3 py-2 text-sm font-medium text-slate-600 shadow-sm xl:inline">
               {userEmail}
             </span>
           )}
           <button
             onClick={handleLogout}
-            className="rounded-2xl border border-slate-200 bg-white/90 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-colors duration-200 hover:border-slate-300 hover:bg-slate-950 hover:text-white"
+            className="rounded-xl border border-slate-200 bg-white/85 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors duration-200 hover:border-slate-300 hover:bg-white hover:text-slate-950"
           >
             {text.logout}
           </button>
         </div>
       </div>
 
-      <div className="flex gap-1 overflow-x-auto border-t border-slate-100 bg-white/82 px-4 py-2 lg:hidden">
+      <div className="flex gap-1 overflow-x-auto border-t border-slate-100 bg-white/75 px-4 py-2 lg:hidden">
         {visibleLinks.map((link) => {
           const isActive = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href)
           return (
