@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
+import { subscribeToTableChanges } from '@/lib/client-realtime'
 import { signStorageUrls } from '@/lib/signed-storage'
 import type { Category, Output } from '@/lib/types'
 import Navbar from '@/components/Navbar'
@@ -145,6 +146,22 @@ export default function OutputsPage() {
       fetchOutputs()
     }
   }, [loading, fetchOutputs])
+
+  useEffect(() => {
+    if (loading) return
+
+    return subscribeToTableChanges(
+      'image-outputs-page-realtime',
+      [
+        { table: 'outputs' },
+        { table: 'categories' },
+      ],
+      () => {
+        void fetchOutputs()
+      },
+      { debounceMs: 500 }
+    )
+  }, [fetchOutputs, loading])
 
   const handleApplyFilter = () => {
     setPage(1)

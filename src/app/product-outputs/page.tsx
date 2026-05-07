@@ -7,6 +7,7 @@ import Navbar from '@/components/Navbar'
 import { apiFetch } from '@/lib/api'
 import { subscribeToTableChanges } from '@/lib/client-realtime'
 import PaginationBar from '@/components/PaginationBar'
+import StorageImage from '@/components/StorageImage'
 import { supabase } from '@/lib/supabase'
 import { sanitizeListingText } from '@/lib/listing-text'
 import { signStorageUrls } from '@/lib/signed-storage'
@@ -106,6 +107,9 @@ export default function ProductOutputsPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [bulkStoreName, setBulkStoreName] = useState('')
   const [copyPage, setCopyPage] = useState(1)
+  const [copyTotal, setCopyTotal] = useState(0)
+  const [copyTotalPages, setCopyTotalPages] = useState(1)
+  const [failedImageCopyIds, setFailedImageCopyIds] = useState<string[]>([])
   const text = {
     loading: pickText(uiLanguage, { zh: '加载中...', en: 'Loading...' }),
     retrying: pickText(uiLanguage, { zh: '正在重试...', en: 'Retrying...' }),
@@ -188,20 +192,27 @@ export default function ProductOutputsPage() {
   const fetchCopies = useCallback(async () => {
     setError(null)
     const params = new URLSearchParams()
+    params.set('page', String(copyPage))
+    params.set('limit', String(COPIES_PER_PAGE))
     if (sku) params.set('sku', sku)
     if (categoryId) params.set('category_id', categoryId)
     if (language) params.set('language', language)
     if (date) params.set('date', date)
+    params.set('listing_filter', filter)
+    if (shopeeFilter.trim()) params.set('shopee_search', shopeeFilter.trim())
     const res = await apiFetch(`/api/product-copies?${params.toString()}`)
     const data = await res.json().catch(() => null)
     if (!res.ok) {
       setError(data?.error || '输出结果加载失败')
       return
     }
-    const rows = Array.isArray(data) ? data : []
+    const rows = (Array.isArray(data?.data) ? data.data : []) as ProductCopy[]
     setCopies(rows)
+    setCopyTotal(Number(data?.total || rows.length || 0))
+    setCopyTotalPages(Math.max(1, Number(data?.totalPages || 1)))
+    setFailedImageCopyIds(Array.isArray(data?.failedCopyIds) ? data.failedCopyIds : [])
     setSelectedIds((previous) => previous.filter((id) => rows.some((row) => row.id === id)))
-  }, [sku, categoryId, language, date])
+  }, [categoryId, copyPage, date, filter, language, shopeeFilter, sku])
 
   const updateCopy = async (copyId: string, patch: Partial<ProductCopy>) => {
     setSavingCopyId(copyId)
@@ -334,37 +345,8 @@ export default function ProductOutputsPage() {
     }
   }, [loading, fetchCategories, fetchCopies])
 
-  const filteredCopies = useMemo(() => {
-    return copies.filter((copy) => {
-      const images = copy.product_copy_images || []
-      const shopeeCategory = formatShopeeCategorySelection(
-        decodeShopeeCategorySelection(copy.products?.attributes?.[SHOPEE_CATEGORY_ATTRIBUTE_KEY])
-      )
-      if (shopeeFilter.trim() && !shopeeCategory.toLowerCase().includes(shopeeFilter.trim().toLowerCase())) {
-        return false
-      }
-      const imageFailed = images.some((image) => image.status === 'failed')
-      if (filter === 'all') return true
-      if (filter === 'image_failed') return imageFailed
-      return (copy.listing_status || 'not_listed') === filter
-    })
-  }, [copies, filter, shopeeFilter])
-
-  const copyTotalPages = Math.max(1, Math.ceil(filteredCopies.length / COPIES_PER_PAGE))
-  const pagedCopies = useMemo(() => {
-    const safePage = Math.min(copyPage, copyTotalPages)
-    const start = (safePage - 1) * COPIES_PER_PAGE
-    return filteredCopies.slice(start, start + COPIES_PER_PAGE)
-  }, [copyPage, copyTotalPages, filteredCopies])
-
-  const failedImageCopyIds = useMemo(() => {
-    return copies
-      .filter((copy) => (copy.product_copy_images || []).some((image) => image.status === 'failed'))
-      .map((copy) => copy.id)
-  }, [copies])
-
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
-  const visibleIds = useMemo(() => filteredCopies.map((copy) => copy.id), [filteredCopies])
+  const visibleIds = useMemo(() => copies.map((copy) => copy.id), [copies])
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedSet.has(id))
 
   useEffect(() => {
@@ -382,7 +364,7 @@ export default function ProductOutputsPage() {
 
     async function loadPageImageUrls() {
       try {
-        await signImageUrls(pagedCopies)
+        await signImageUrls(copies)
       } catch (err) {
         if (!cancelled) {
           setError((current) => current || (err instanceof Error ? err.message : '鍥剧墖鍔犺浇澶辫触'))
@@ -395,7 +377,7 @@ export default function ProductOutputsPage() {
     return () => {
       cancelled = true
     }
-  }, [pagedCopies, signImageUrls])
+  }, [copies, signImageUrls])
 
   useEffect(() => {
     if (loading) return
@@ -601,7 +583,7 @@ export default function ProductOutputsPage() {
             <button
               type="button"
               onClick={() => exportCopies(false)}
-              disabled={visibleIds.length === 0 || busyKey === 'export-all'}
+              disabled={copies.length === 0 || busyKey === 'export-all'}
               className="rounded-xl border border-slate-300 bg-white/85 px-4 py-2.5 text-xs font-semibold text-slate-700 transition hover:-translate-y-0.5 hover:bg-white disabled:text-slate-300"
             >
               {text.exportFiltered}
@@ -612,14 +594,14 @@ export default function ProductOutputsPage() {
         {error && <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700 shadow-sm">{error}</div>}
         {notice && <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700 shadow-sm">{notice}</div>}
 
-        {filteredCopies.length === 0 ? (
+        {copies.length === 0 ? (
           <div className="glass-surface rounded-[1.25rem] p-12 text-center">
             <h2 className="text-xl font-semibold text-slate-950">{text.emptyTitle}</h2>
             <p className="mt-2 text-sm text-slate-500">{text.emptyDescription}</p>
           </div>
         ) : (
           <div className="grid gap-5 xl:grid-cols-2">
-            {pagedCopies.map((copy) => {
+            {copies.map((copy) => {
               const product = copy.products
               const category = product?.categories
               const images = (copy.product_copy_images || []).sort((a, b) => a.prompt_number - b.prompt_number)
@@ -761,13 +743,31 @@ export default function ProductOutputsPage() {
                                 <div>
                                   <div className="mb-1 text-[11px] font-semibold text-slate-500">{pickText(uiLanguage, { zh: '当前图', en: 'Current image' })}</div>
                                   <div className="aspect-square overflow-hidden rounded-lg bg-white ring-1 ring-slate-200">
-                                    {image.output_storage_path ? <img src={imageUrls[image.output_storage_path]} alt={pickText(uiLanguage, { zh: '当前图', en: 'Current image' })} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-xs text-slate-400">{pickText(uiLanguage, { zh: '暂无', en: 'Empty' })}</div>}
+                                    {image.output_storage_path ? (
+                                      <StorageImage
+                                        bucket="outputs"
+                                        storagePath={image.output_storage_path}
+                                        initialSrc={imageUrls[image.output_storage_path]}
+                                        alt={pickText(uiLanguage, { zh: '\u5f53\u524d\u56fe', en: 'Current image' })}
+                                        fill
+                                        className="h-full w-full object-cover"
+                                      />
+                                    ) : <div className="flex h-full items-center justify-center text-xs text-slate-400">{pickText(uiLanguage, { zh: '??', en: 'Empty' })}</div>}
                                   </div>
                                 </div>
                                 <div>
                                   <div className="mb-1 text-[11px] font-semibold text-amber-600">{pickText(uiLanguage, { zh: '待确认新图', en: 'Pending image' })}</div>
                                   <div className="aspect-square overflow-hidden rounded-lg bg-white ring-1 ring-amber-200">
-                                    {image.pending_storage_path ? <img src={imageUrls[image.pending_storage_path]} alt={pickText(uiLanguage, { zh: '待确认新图', en: 'Pending image' })} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-xs text-slate-400">{pickText(uiLanguage, { zh: '未生成', en: 'Not generated' })}</div>}
+                                    {image.pending_storage_path ? (
+                                      <StorageImage
+                                        bucket="outputs"
+                                        storagePath={image.pending_storage_path}
+                                        initialSrc={imageUrls[image.pending_storage_path]}
+                                        alt={pickText(uiLanguage, { zh: '\u5f85\u786e\u8ba4\u65b0\u56fe', en: 'Pending image' })}
+                                        fill
+                                        className="h-full w-full object-cover"
+                                      />
+                                    ) : <div className="flex h-full items-center justify-center text-xs text-slate-400">{pickText(uiLanguage, { zh: '\u672a\u751f\u6210', en: 'Not generated' })}</div>}
                                   </div>
                                 </div>
                               </div>
@@ -844,12 +844,12 @@ export default function ProductOutputsPage() {
             })}
           </div>
         )}
-        {filteredCopies.length > 0 && (
+        {copies.length > 0 && (
           <PaginationBar
             page={copyPage}
             totalPages={copyTotalPages}
             onPageChange={setCopyPage}
-            totalLabel={text.pageSummary(filteredCopies.length, Math.min(copyPage, copyTotalPages), copyTotalPages)}
+            totalLabel={text.pageSummary(copyTotal, Math.min(copyPage, copyTotalPages), copyTotalPages)}
           />
         )}
       </main>

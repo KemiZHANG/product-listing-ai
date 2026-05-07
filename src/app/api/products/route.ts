@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
+import { logServerEvent } from '@/lib/observability'
 
 function normalizeLanguages(value: unknown) {
   if (!Array.isArray(value)) return ['en']
@@ -29,7 +30,9 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const search = searchParams.get('search')?.trim()
   const categoryId = searchParams.get('category_id')?.trim()
-  const limit = Math.min(Math.max(Number(searchParams.get('limit') || 80), 1), 200)
+  const statusFilter = searchParams.get('status_filter')?.trim()
+  const page = Math.max(1, Number(searchParams.get('page') || 1))
+  const limit = Math.min(Math.max(Number(searchParams.get('limit') || 24), 1), 100)
 
   let query = supabase
     .from('products')
@@ -52,6 +55,15 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await query
   if (error) {
+    logServerEvent('error', 'products.load_failed', {
+      workspaceKey,
+      search,
+      categoryId,
+      statusFilter,
+      page,
+      limit,
+      message: error.message,
+    })
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
@@ -68,10 +80,32 @@ export async function GET(request: NextRequest) {
     copyCounts = countCopiesByProduct(copies || [])
   }
 
-  return NextResponse.json(products.map((product) => ({
+  const enrichedProducts = products.map((product) => ({
     ...product,
     copy_count_generated: copyCounts[product.id] || 0,
-  })))
+  }))
+
+  const filteredProducts = enrichedProducts.filter((product) => {
+    if (!statusFilter || statusFilter === 'all') return true
+
+    const sourceImageCount = product.images?.length || 0
+    if (statusFilter === 'missing_images') return sourceImageCount === 0
+    if (statusFilter === 'generated') return (product.copy_count_generated || 0) > 0
+    if (statusFilter === 'pending') return sourceImageCount > 0 && !(product.copy_count_generated || 0)
+    return true
+  })
+
+  const total = filteredProducts.length
+  const totalPages = Math.max(1, Math.ceil(total / limit))
+  const safePage = Math.min(page, totalPages)
+  const start = (safePage - 1) * limit
+
+  return NextResponse.json({
+    data: filteredProducts.slice(start, start + limit),
+    total,
+    totalPages,
+    page: safePage,
+  })
 }
 
 export async function POST(request: NextRequest) {

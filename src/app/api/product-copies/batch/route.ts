@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { logServerEvent } from '@/lib/observability'
 import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 
 export async function PATCH(request: NextRequest) {
@@ -45,8 +46,20 @@ export async function PATCH(request: NextRequest) {
     .select('id')
 
   if (error) {
+    logServerEvent('error', 'product_copies.batch_update_failed', {
+      workspaceKey,
+      idCount: ids.length,
+      fields: Object.keys(patch),
+      message: error.message,
+    })
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  logServerEvent('info', 'product_copies.batch_updated', {
+    workspaceKey,
+    idCount: data?.length || 0,
+    fields: Object.keys(patch),
+  })
 
   return NextResponse.json({ updated: data?.length || 0 })
 }

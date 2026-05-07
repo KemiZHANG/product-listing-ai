@@ -5,6 +5,8 @@ const ALLOWED_EVENTS = new Set([
   'auth_login_failed',
   'auth_register_failed',
   'auth_access_denied_client',
+  'api_server_error',
+  'storage_signed_url_failed',
 ])
 
 export async function POST(request: NextRequest) {

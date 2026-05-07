@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { postClientEvent } from './client-telemetry'
 import { signOutAndRedirectToLogin } from './client-auth'
 
 const RETRYABLE_METHODS = new Set(['GET', 'HEAD'])
@@ -52,6 +53,14 @@ export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {})
 
   if (typeof window !== 'undefined' && response.status === 401) {
     void signOutAndRedirectToLogin()
+  }
+
+  if (typeof window !== 'undefined' && response.status >= 500) {
+    void postClientEvent('api_server_error', {
+      method,
+      status: response.status,
+      url: typeof input === 'string' ? input : input.toString(),
+    })
   }
 
   return response

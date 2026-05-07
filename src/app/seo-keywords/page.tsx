@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import { apiFetch } from '@/lib/api'
+import { subscribeToTableChanges } from '@/lib/client-realtime'
 import { supabase } from '@/lib/supabase'
 import { PRODUCT_LANGUAGES, type Category } from '@/lib/types'
 import { getCategoryDisplayName, pickText, useUiLanguage } from '@/lib/ui-language'
@@ -127,6 +128,8 @@ export default function SeoKeywordsPage() {
   const [seedText, setSeedText] = useState('')
   const [previewTitle, setPreviewTitle] = useState('')
   const [previewDescription, setPreviewDescription] = useState('')
+  const [keywordSearch, setKeywordSearch] = useState('')
+  const [keywordTypeFilter, setKeywordTypeFilter] = useState<'all' | SeoKeywordType>('all')
   const [saving, setSaving] = useState(false)
   const [suggesting, setSuggesting] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -246,6 +249,22 @@ export default function SeoKeywordsPage() {
     if (!loading) void fetchData()
   }, [loading, fetchData])
 
+  useEffect(() => {
+    if (loading) return
+
+    return subscribeToTableChanges(
+      'seo-keywords-page-realtime',
+      [
+        { table: 'rule_templates' },
+        { table: 'categories' },
+      ],
+      () => {
+        void fetchData()
+      },
+      { debounceMs: 500 }
+    )
+  }, [fetchData, loading])
+
   const effectiveCategoryId = categoryId || categories[0]?.id || ''
   const currentBank = useMemo(() => {
     return banks.find((bank) => bank.category_id === effectiveCategoryId && bank.language_code === languageCode) || null
@@ -256,10 +275,24 @@ export default function SeoKeywordsPage() {
   }, [currentBank])
 
   const currentCategory = categories.find((category) => category.id === effectiveCategoryId)
+  const visibleKeywords = useMemo(() => {
+    const term = keywordSearch.trim().toLowerCase()
+    return keywords.filter((keyword) => {
+      if (keywordTypeFilter !== 'all' && keyword.type !== keywordTypeFilter) {
+        return false
+      }
+
+      if (!term) return true
+
+      return [keyword.keyword, keyword.note || '', keyword.type]
+        .some((value) => value.toLowerCase().includes(term))
+    })
+  }, [keywordSearch, keywordTypeFilter, keywords])
+
   const groupedKeywords = KEYWORD_TYPE_ORDER.map((type) => ({
     type,
     ...getKeywordTypeMeta(type, language),
-    items: keywords.filter((keyword) => keyword.type === type),
+    items: visibleKeywords.filter((keyword) => keyword.type === type),
   }))
 
   const previewHasContent = Boolean(previewTitle.trim() || previewDescription.trim())
@@ -515,6 +548,41 @@ export default function SeoKeywordsPage() {
           <button onClick={() => void saveBank('append')} disabled={saving || !effectiveCategoryId} className="self-end rounded-2xl border border-blue-200 bg-white px-5 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:text-slate-300">
             {text.appendOnly}
           </button>
+        </section>
+
+        <section className="mb-6 grid gap-4 rounded-[1.4rem] border border-slate-200/80 bg-white/88 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.05)] md:grid-cols-[1fr_270px_auto]">
+          <label className="block">
+            <span className="mb-2 block text-sm font-semibold text-slate-700">
+              {pickText(language, { zh: '搜索当前草稿', en: 'Search current draft' })}
+            </span>
+            <input
+              value={keywordSearch}
+              onChange={(event) => setKeywordSearch(event.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+              placeholder={pickText(language, { zh: '搜索关键词内容或备注', en: 'Search keyword text or note' })}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-sm font-semibold text-slate-700">
+              {pickText(language, { zh: '关键词类型', en: 'Keyword type' })}
+            </span>
+            <select
+              value={keywordTypeFilter}
+              onChange={(event) => setKeywordTypeFilter(event.target.value as 'all' | SeoKeywordType)}
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+            >
+              <option value="all">{pickText(language, { zh: '全部类型', en: 'All keyword types' })}</option>
+              {KEYWORD_TYPE_ORDER.map((type) => (
+                <option key={type} value={type}>{getKeywordTypeMeta(type, language).label}</option>
+              ))}
+            </select>
+          </label>
+          <div className="self-end rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-600">
+            {pickText(language, {
+              zh: `当前草稿共 ${visibleKeywords.length} 个关键词`,
+              en: `${visibleKeywords.length} keywords in this draft`,
+            })}
+          </div>
         </section>
 
         <div className="grid gap-6 xl:grid-cols-[1fr_420px]">

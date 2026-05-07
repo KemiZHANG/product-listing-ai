@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import { apiFetch } from '@/lib/api'
+import { subscribeToTableChanges } from '@/lib/client-realtime'
 import { supabase } from '@/lib/supabase'
 import { getProductImageRoleLabel } from '@/lib/types'
 import { pickText, useUiLanguage } from '@/lib/ui-language'
@@ -170,6 +171,23 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!loading) fetchDashboard()
   }, [loading, fetchDashboard])
+
+  useEffect(() => {
+    if (loading) return
+
+    return subscribeToTableChanges(
+      'dashboard-page-realtime',
+      [
+        { table: 'products' },
+        { table: 'product_copies' },
+        { table: 'product_copy_images' },
+      ],
+      () => {
+        void fetchDashboard()
+      },
+      { debounceMs: 500 }
+    )
+  }, [fetchDashboard, loading])
 
   if (loading) {
     return <div className="app-shell flex min-h-screen items-center justify-center text-sm text-slate-500">{text.loading}</div>

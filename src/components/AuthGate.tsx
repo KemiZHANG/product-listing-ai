@@ -2,14 +2,18 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { fetchAccessStatus, signOutAndRedirectToLogin } from '@/lib/client-auth'
+import { fetchAccessStatus, persistAuthorizedSession, signOutAndRedirectToLogin } from '@/lib/client-auth'
 import { supabase } from '@/lib/supabase'
+import { getAuthGateCopy } from '@/lib/ui-copy'
+import { useUiLanguage } from '@/lib/ui-language'
 
 const PUBLIC_PATHS = new Set(['/login'])
 const ACCESS_CHECK_INTERVAL_MS = 15000
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const { language } = useUiLanguage()
+  const text = getAuthGateCopy(language)
   const isPublicPath = useMemo(() => PUBLIC_PATHS.has(pathname), [pathname])
   const [ready, setReady] = useState(isPublicPath)
 
@@ -39,6 +43,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
           await signOutAndRedirectToLogin()
           return
         }
+
+        await persistAuthorizedSession(session.access_token)
 
         if (!disposed) {
           setReady(true)
@@ -97,7 +103,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 text-sm font-medium text-slate-500">
-      Checking access...
+      {text.checkingAccess}
     </div>
   )
 }

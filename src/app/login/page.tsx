@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import BrandMark from '@/components/BrandMark'
 import LanguageToggle from '@/components/LanguageToggle'
 import { getClientBrandConfig } from '@/lib/brand'
-import { fetchAccessStatus, readJsonSafely } from '@/lib/client-auth'
+import { fetchAccessStatus, persistAuthorizedSession, readJsonSafely } from '@/lib/client-auth'
 import { postClientEvent } from '@/lib/client-telemetry'
 import { pickText, useUiLanguage } from '@/lib/ui-language'
 import { supabase } from '@/lib/supabase'
@@ -70,6 +70,8 @@ export default function LoginPage() {
         en: 'This account is not authorized for the current site.',
       }))
     }
+
+    await persistAuthorizedSession(token)
   }
 
   useEffect(() => {

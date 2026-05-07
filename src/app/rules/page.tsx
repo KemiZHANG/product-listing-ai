@@ -1,8 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
+import PaginationBar from '@/components/PaginationBar'
 import { apiFetch } from '@/lib/api'
 import { subscribeToTableChanges } from '@/lib/client-realtime'
 import { supabase } from '@/lib/supabase'
@@ -15,6 +16,8 @@ const defaultForm = {
   content: '',
   active: true,
 }
+
+const RULES_PER_PAGE = 10
 
 function scopeLabel(scope: RuleTemplate['scope'], language: 'zh' | 'en') {
   const labels = {
@@ -34,6 +37,10 @@ export default function RulesPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState(defaultForm)
   const [error, setError] = useState<string | null>(null)
+  const [searchText, setSearchText] = useState('')
+  const [scopeFilter, setScopeFilter] = useState<'all' | RuleTemplate['scope']>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const [page, setPage] = useState(1)
 
   const text = {
     loading: pickText(language, { zh: '加载中...', en: 'Loading...' }),
@@ -103,6 +110,34 @@ export default function RulesPage() {
     )
   }, [fetchRules, loading])
 
+  const filteredRules = useMemo(() => {
+    const term = searchText.trim().toLowerCase()
+    return rules.filter((rule) => {
+      if (scopeFilter !== 'all' && rule.scope !== scopeFilter) return false
+      if (statusFilter === 'active' && !rule.active) return false
+      if (statusFilter === 'inactive' && rule.active) return false
+      if (!term) return true
+      return [rule.name, rule.content, rule.scope].some((value) => value.toLowerCase().includes(term))
+    })
+  }, [rules, scopeFilter, searchText, statusFilter])
+
+  const totalPages = Math.max(1, Math.ceil(filteredRules.length / RULES_PER_PAGE))
+  const visibleRules = useMemo(() => {
+    const safePage = Math.min(page, totalPages)
+    const start = (safePage - 1) * RULES_PER_PAGE
+    return filteredRules.slice(start, start + RULES_PER_PAGE)
+  }, [filteredRules, page, totalPages])
+
+  useEffect(() => {
+    setPage(1)
+  }, [scopeFilter, searchText, statusFilter])
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages)
+    }
+  }, [page, totalPages])
+
   const editRule = (rule: RuleTemplate) => {
     setEditingId(rule.id)
     setForm({
@@ -161,6 +196,44 @@ export default function RulesPage() {
         </div>
         {error && <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700 shadow-sm">{error}</div>}
 
+        <section className="mb-6 grid gap-4 rounded-[1.4rem] border border-slate-200/80 bg-white/88 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.05)] md:grid-cols-[1fr_260px_220px]">
+          <label className="block">
+            <span className="mb-2 block text-sm font-semibold text-slate-600">{pickText(language, { zh: '搜索', en: 'Search' })}</span>
+            <input
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+              placeholder={pickText(language, { zh: '按名称或内容搜索', en: 'Search by name or content' })}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-sm font-semibold text-slate-600">{text.scope}</span>
+            <select
+              value={scopeFilter}
+              onChange={(event) => setScopeFilter(event.target.value as 'all' | RuleTemplate['scope'])}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+            >
+              <option value="all">{pickText(language, { zh: '全部范围', en: 'All scopes' })}</option>
+              <option value="general">{scopeLabel('general', language)}</option>
+              <option value="title_description">{scopeLabel('title_description', language)}</option>
+              <option value="image">{scopeLabel('image', language)}</option>
+              <option value="platform">{scopeLabel('platform', language)}</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-sm font-semibold text-slate-600">{pickText(language, { zh: '状态', en: 'Status' })}</span>
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as 'all' | 'active' | 'inactive')}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+            >
+              <option value="all">{pickText(language, { zh: '全部', en: 'All' })}</option>
+              <option value="active">{text.enabled}</option>
+              <option value="inactive">{text.disabled}</option>
+            </select>
+          </label>
+        </section>
+
         <div className="grid gap-6 lg:grid-cols-[480px_1fr]">
           <form onSubmit={saveRule} className="rounded-[1.4rem] border border-slate-200/80 bg-white/88 p-6 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur">
             <h2 className="text-xl font-semibold text-slate-950">{editingId ? text.editRule : text.createRule}</h2>
@@ -200,12 +273,12 @@ export default function RulesPage() {
           <section className="rounded-[1.4rem] border border-slate-200/80 bg-white/88 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur">
             <div className="mb-4 flex items-center gap-3">
               <h2 className="text-xl font-semibold text-slate-950">{text.list}</h2>
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">{text.count(rules.length)}</span>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">{text.count(filteredRules.length)}</span>
             </div>
             <div className="space-y-3">
-              {rules.length === 0 ? (
+              {filteredRules.length === 0 ? (
                 <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500">{text.empty}</div>
-              ) : rules.map((rule) => (
+              ) : visibleRules.map((rule) => (
                 <article key={rule.id} className={`rounded-2xl border bg-white/92 p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-300 ${editingId === rule.id ? 'border-blue-400 ring-2 ring-blue-100' : 'border-slate-200'}`}>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -234,6 +307,19 @@ export default function RulesPage() {
                 </article>
               ))}
             </div>
+            {filteredRules.length > 0 && (
+              <div className="mt-4">
+                <PaginationBar
+                  page={page}
+                  totalPages={totalPages}
+                  onPageChange={setPage}
+                  totalLabel={pickText(language, {
+                    zh: `共 ${filteredRules.length} 条规则，当前第 ${Math.min(page, totalPages)} / ${totalPages} 页`,
+                    en: `${filteredRules.length} rules · page ${Math.min(page, totalPages)} / ${totalPages}`,
+                  })}
+                />
+              </div>
+            )}
           </section>
         </div>
       </main>

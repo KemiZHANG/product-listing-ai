@@ -316,6 +316,8 @@ export default function ProductDashboardPage() {
   const [categoryFilter, setCategoryFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'missing_images' | 'generated' | 'pending'>('all')
   const [productPage, setProductPage] = useState(1)
+  const [productTotal, setProductTotal] = useState(0)
+  const [productTotalPages, setProductTotalPages] = useState(1)
   const text = language === 'en'
     ? {
         loading: 'Loading...',
@@ -434,8 +436,16 @@ export default function ProductDashboardPage() {
     setFetching(true)
     setError(null)
     try {
+      const productParams = new URLSearchParams({
+        limit: '24',
+        page: String(productPage),
+        status_filter: statusFilter,
+      })
+      if (searchText.trim()) productParams.set('search', searchText.trim())
+      if (categoryFilter) productParams.set('category_id', categoryFilter)
+
       const [productsRes, categoriesRes, columnsRes] = await Promise.all([
-        apiFetch('/api/products?limit=120'),
+        apiFetch(`/api/products?${productParams.toString()}`),
         apiFetch('/api/categories'),
         apiFetch('/api/product-attributes'),
       ])
@@ -450,7 +460,9 @@ export default function ProductDashboardPage() {
       if (!categoriesRes.ok) throw new Error(categoriesData?.error || '类目加载失败')
       if (!columnsRes.ok) throw new Error(columnsData?.error || '属性列加载失败')
 
-      setProducts(productsData || [])
+      setProducts(Array.isArray(productsData?.data) ? productsData.data : [])
+      setProductTotal(Number(productsData?.total || 0))
+      setProductTotalPages(Math.max(1, Number(productsData?.totalPages || 1)))
       setCategories(categoriesData || [])
       setColumns(columnsData || [])
 
@@ -459,7 +471,7 @@ export default function ProductDashboardPage() {
     } finally {
       setFetching(false)
     }
-  }, [])
+  }, [categoryFilter, productPage, searchText, statusFilter])
 
   useEffect(() => {
     if (!loading) fetchAll()
@@ -471,37 +483,7 @@ export default function ProductDashboardPage() {
     return { imageCount, copyTarget }
   }, [products])
 
-  const filteredProducts = useMemo(() => {
-    const term = searchText.trim().toLowerCase()
-    return products.filter((product) => {
-      if (categoryFilter && product.category_id !== categoryFilter) return false
-
-      if (statusFilter === 'missing_images' && (product.images || []).length > 0) return false
-      if (statusFilter === 'generated' && !product.copy_count_generated) return false
-      if (statusFilter === 'pending' && ((product.images || []).length === 0 || product.copy_count_generated)) return false
-
-      if (!term) return true
-
-      const categoryName = product.categories
-        ? `${product.categories.name_zh || ''} ${product.categories.slug || ''} ${getCategoryDisplayName(product.categories, language)}`
-        : ''
-      const shopeeCategory = formatShopeeCategorySelection(productShopeeCategory(product))
-      return [
-        product.sku,
-        product.source_title || '',
-        product.source_description || '',
-        categoryName,
-        shopeeCategory,
-      ].some((value) => value.toLowerCase().includes(term))
-    })
-  }, [categoryFilter, language, products, searchText, statusFilter])
-
-  const productTotalPages = Math.max(1, Math.ceil(filteredProducts.length / 24))
-  const pagedProducts = useMemo(() => {
-    const safePage = Math.min(productPage, productTotalPages)
-    const start = (safePage - 1) * 24
-    return filteredProducts.slice(start, start + 24)
-  }, [filteredProducts, productPage, productTotalPages])
+  const pagedProducts = products
 
   useEffect(() => {
     setProductPage(1)
@@ -973,7 +955,7 @@ export default function ProductDashboardPage() {
             </select>
           </label>
           <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-200">
-            {text.productCount(filteredProducts.length)}
+                  {text.productCount(productTotal)}
           </div>
         </section>
 
@@ -1145,8 +1127,8 @@ export default function ProductDashboardPage() {
           totalPages={productTotalPages}
           onPageChange={setProductPage}
           totalLabel={pickText(language, {
-            zh: `共 ${filteredProducts.length} 个商品，当前第 ${Math.min(productPage, productTotalPages)} / ${productTotalPages} 页`,
-            en: `${filteredProducts.length} products · page ${Math.min(productPage, productTotalPages)} / ${productTotalPages}`,
+            zh: `共 ${productTotal} 个商品，当前第 ${Math.min(productPage, productTotalPages)} / ${productTotalPages} 页`,
+            en: `${productTotal} products · page ${Math.min(productPage, productTotalPages)} / ${productTotalPages}`,
           })}
         />
         {fetching && (

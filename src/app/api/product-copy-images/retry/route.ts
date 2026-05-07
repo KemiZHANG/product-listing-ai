@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { AI_ACCESS_ERROR, getGenerationAccess } from '@/lib/generation-access'
+import { logServerEvent } from '@/lib/observability'
 import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 
 type CopyImageRow = {
@@ -52,6 +53,13 @@ export async function POST(request: NextRequest) {
 
   const { data: rows, error: readError } = await query
   if (readError) {
+    logServerEvent('error', 'product_copy_images.retry_read_failed', {
+      workspaceKey,
+      imageIdCount: imageIds.length,
+      copyIdCount: copyIds.length,
+      failedOnly,
+      message: readError.message,
+    })
     return NextResponse.json({ error: readError.message }, { status: 500 })
   }
 
@@ -75,6 +83,12 @@ export async function POST(request: NextRequest) {
     .in('id', retryImageIds)
 
   if (updateError) {
+    logServerEvent('error', 'product_copy_images.retry_update_failed', {
+      workspaceKey,
+      retryImageCount: retryImageIds.length,
+      retryCopyCount: retryCopyIds.length,
+      message: updateError.message,
+    })
     return NextResponse.json({ error: updateError.message }, { status: 500 })
   }
 
@@ -94,6 +108,12 @@ export async function POST(request: NextRequest) {
     body: JSON.stringify({ copy_ids: retryCopyIds }),
   }).catch(() => {
     // Images remain queued, so the user can retry again from the workbench.
+  })
+
+  logServerEvent('info', 'product_copy_images.retry_queued', {
+    workspaceKey,
+    retryImageCount: retryImageIds.length,
+    retryCopyCount: retryCopyIds.length,
   })
 
   return NextResponse.json({ queued: retryImageIds.length, copy_ids: retryCopyIds })

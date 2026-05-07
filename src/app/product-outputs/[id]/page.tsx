@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
+import StorageImage from '@/components/StorageImage'
 import { apiFetch } from '@/lib/api'
 import { subscribeToTableChanges } from '@/lib/client-realtime'
 import { supabase } from '@/lib/supabase'
@@ -424,7 +425,16 @@ export default function ProductOutputDetailPage() {
                   <h2 className="mb-3 text-sm font-semibold text-slate-900">{text.sourceImages}</h2>
                   <div className="grid grid-cols-4 gap-2">
                     {(product?.images || []).map((image) => (
-                      <img key={image.id} src={sourceUrls[image.storage_path]} alt={image.display_name} className="aspect-square rounded-xl border border-slate-200 object-cover shadow-sm" />
+                      <StorageImage
+                        key={image.id}
+                        bucket="images"
+                        storagePath={image.storage_path}
+                        initialSrc={sourceUrls[image.storage_path]}
+                        alt={image.display_name}
+                        width={240}
+                        height={240}
+                        className="aspect-square rounded-xl border border-slate-200 object-cover shadow-sm"
+                      />
                     ))}
                   </div>
                 </div>
@@ -453,7 +463,14 @@ export default function ProductOutputDetailPage() {
                             <div className="mb-1 text-xs font-semibold text-slate-500">{text.currentImage}</div>
                             <div className="aspect-square overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
                               {image.output_storage_path ? (
-                                <img src={outputUrls[image.output_storage_path]} alt={image.output_filename || `P${image.prompt_number}`} className="h-full w-full object-cover" />
+                                <StorageImage
+                                  bucket="outputs"
+                                  storagePath={image.output_storage_path}
+                                  initialSrc={outputUrls[image.output_storage_path]}
+                                  alt={image.output_filename || `P${image.prompt_number}`}
+                                  fill
+                                  className="h-full w-full object-cover"
+                                />
                               ) : (
                                 <div className="flex h-full items-center justify-center px-4 text-center text-xs text-slate-400">{text.emptyCurrentImage}</div>
                               )}
@@ -464,7 +481,14 @@ export default function ProductOutputDetailPage() {
                             <div className="mb-1 text-xs font-semibold text-amber-600">{text.pendingImage}</div>
                             <div className="aspect-square overflow-hidden rounded-2xl bg-white ring-1 ring-amber-200">
                               {image.pending_storage_path ? (
-                                <img src={outputUrls[image.pending_storage_path]} alt={`待确认 P${image.prompt_number}`} className="h-full w-full object-cover" />
+                                <StorageImage
+                                  bucket="outputs"
+                                  storagePath={image.pending_storage_path}
+                                  initialSrc={outputUrls[image.pending_storage_path]}
+                                  alt={`P${image.prompt_number} pending`}
+                                  fill
+                                  className="h-full w-full object-cover"
+                                />
                               ) : (
                                 <div className="flex h-full items-center justify-center px-4 text-center text-xs text-slate-400">{text.noPendingImage}</div>
                               )}

@@ -1,4 +1,5 @@
 import { apiFetch } from './api'
+import { postClientEvent } from './client-telemetry'
 
 type StorageBucket = 'images' | 'outputs'
 
@@ -73,6 +74,11 @@ export async function signStorageUrls(
     const data = await res.json().catch(() => null)
 
     if (!res.ok) {
+      void postClientEvent('storage_signed_url_failed', {
+        bucket,
+        pathCount: chunk.length,
+        status: res.status,
+      })
       const fallbackUrls = Object.fromEntries(
         chunk
           .map((path) => [path, getCachedSignedUrl(bucket, path)])
@@ -91,6 +97,16 @@ export async function signStorageUrls(
       if (!url) continue
       urls[path] = url
       setCachedSignedUrl(bucket, path, url)
+    }
+
+    const missingCount = chunk.filter((path) => !chunkUrls[path]).length
+    if (missingCount > 0) {
+      void postClientEvent('storage_signed_url_failed', {
+        bucket,
+        pathCount: chunk.length,
+        missingCount,
+        status: res.status,
+      })
     }
   }
 

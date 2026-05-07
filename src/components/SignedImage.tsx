@@ -12,6 +12,7 @@ type SignedImageProps = {
   height?: number
   fill?: boolean
   emptyFallback?: ReactNode
+  onError?: () => void
 }
 
 export default function SignedImage({
@@ -23,14 +24,15 @@ export default function SignedImage({
   height = 1200,
   fill = false,
   emptyFallback = null,
+  onError,
 }: SignedImageProps) {
   if (!src) {
     return <>{emptyFallback}</>
   }
 
   if (fill) {
-    return <Image src={src} alt={alt} fill unoptimized sizes={sizes} className={className} />
+    return <Image src={src} alt={alt} fill unoptimized sizes={sizes} className={className} onError={onError} />
   }
 
-  return <Image src={src} alt={alt} width={width} height={height} unoptimized sizes={sizes} className={className} />
+  return <Image src={src} alt={alt} width={width} height={height} unoptimized sizes={sizes} className={className} onError={onError} />
 }
