@@ -367,7 +367,7 @@ export default function ProductOutputsPage() {
         await signImageUrls(copies)
       } catch (err) {
         if (!cancelled) {
-          setError((current) => current || (err instanceof Error ? err.message : '鍥剧墖鍔犺浇澶辫触'))
+          setError((current) => current || (err instanceof Error ? err.message : '图片加载失败'))
         }
       }
     }
@@ -742,7 +742,7 @@ export default function ProductOutputsPage() {
                               <div className="mt-3 grid grid-cols-2 gap-2">
                                 <div>
                                   <div className="mb-1 text-[11px] font-semibold text-slate-500">{pickText(uiLanguage, { zh: '当前图', en: 'Current image' })}</div>
-                                  <div className="aspect-square overflow-hidden rounded-lg bg-white ring-1 ring-slate-200">
+                                  <div className="relative aspect-square overflow-hidden rounded-lg bg-white ring-1 ring-slate-200">
                                     {image.output_storage_path ? (
                                       <StorageImage
                                         bucket="outputs"
@@ -752,12 +752,12 @@ export default function ProductOutputsPage() {
                                         fill
                                         className="h-full w-full object-cover"
                                       />
-                                    ) : <div className="flex h-full items-center justify-center text-xs text-slate-400">{pickText(uiLanguage, { zh: '??', en: 'Empty' })}</div>}
+                                    ) : <div className="flex h-full items-center justify-center text-xs text-slate-400">{pickText(uiLanguage, { zh: '暂无', en: 'Empty' })}</div>}
                                   </div>
                                 </div>
                                 <div>
                                   <div className="mb-1 text-[11px] font-semibold text-amber-600">{pickText(uiLanguage, { zh: '待确认新图', en: 'Pending image' })}</div>
-                                  <div className="aspect-square overflow-hidden rounded-lg bg-white ring-1 ring-amber-200">
+                                  <div className="relative aspect-square overflow-hidden rounded-lg bg-white ring-1 ring-amber-200">
                                     {image.pending_storage_path ? (
                                       <StorageImage
                                         bucket="outputs"

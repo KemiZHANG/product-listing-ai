@@ -220,7 +220,7 @@ export default function ProductOutputDetailPage() {
     let response = await fetch(signedUrl)
     if (!response.ok) {
       signedUrl = await signStorageUrl('outputs', path, { force: true })
-      if (!signedUrl) throw new Error('鍥剧墖涓嬭浇閾炬帴鐢熸垚澶辫触')
+      if (!signedUrl) throw new Error('图片下载链接生成失败')
       response = await fetch(signedUrl)
     }
     if (!response.ok) throw new Error('图片下载失败')
@@ -461,7 +461,7 @@ export default function ProductOutputDetailPage() {
                         <div className="mt-3 grid grid-cols-2 gap-3">
                           <div>
                             <div className="mb-1 text-xs font-semibold text-slate-500">{text.currentImage}</div>
-                            <div className="aspect-square overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
+                            <div className="relative aspect-square overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200">
                               {image.output_storage_path ? (
                                 <StorageImage
                                   bucket="outputs"
@@ -479,7 +479,7 @@ export default function ProductOutputDetailPage() {
 
                           <div>
                             <div className="mb-1 text-xs font-semibold text-amber-600">{text.pendingImage}</div>
-                            <div className="aspect-square overflow-hidden rounded-2xl bg-white ring-1 ring-amber-200">
+                            <div className="relative aspect-square overflow-hidden rounded-2xl bg-white ring-1 ring-amber-200">
                               {image.pending_storage_path ? (
                                 <StorageImage
                                   bucket="outputs"
