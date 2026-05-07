@@ -40,7 +40,7 @@ function promptNumberForRole(role: ProductImageRole) {
   return IMAGE_ROLE_ORDER.indexOf(role) + 1
 }
 
-function normalizeImageRoles(value: unknown): ProductImageRole[] {
+function normalizeImageRoles(value: unknown, fallbackToDefault = true): ProductImageRole[] {
   const roles = Array.isArray(value)
     ? value
     : typeof value === 'string'
@@ -50,7 +50,7 @@ function normalizeImageRoles(value: unknown): ProductImageRole[] {
     .map((role) => normalizeProductImageRole(String(role)))
     .filter(Boolean) as ProductImageRole[]
   const deduped = IMAGE_ROLE_ORDER.filter((role) => normalized.includes(role))
-  return deduped.length > 0 ? deduped : DEFAULT_PRODUCT_IMAGE_ROLES
+  return deduped.length > 0 ? deduped : fallbackToDefault ? DEFAULT_PRODUCT_IMAGE_ROLES : []
 }
 
 function parseJsonRecord(value: unknown): Record<string, unknown> | null {
@@ -113,7 +113,7 @@ function parseLanguageCopyPlan(product: {
         const languageCode = String(record.languageCode || '')
         const copyIndex = Math.max(1, Math.floor(Number(record.copyIndex || 1)))
         if (!allowedCodes.has(languageCode)) continue
-        imagePlanByKey.set(copySlotKey(languageCode, copyIndex), normalizeImageRoles(record.imageRoles))
+        imagePlanByKey.set(copySlotKey(languageCode, copyIndex), normalizeImageRoles(record.imageRoles, false))
       }
 
       return slots.map((slot) => ({
@@ -263,6 +263,7 @@ export async function POST(request: NextRequest) {
   }
 
   const createdCopyIds: string[] = []
+  const imageCopyIds: string[] = []
 
   for (const product of products) {
     if (!product.category_id) {
@@ -301,15 +302,14 @@ export async function POST(request: NextRequest) {
     await supabase.from('product_copies').delete().eq('product_id', product.id)
 
     const copyPlan = parseLanguageCopyPlan(product)
+    let productHasImageJobs = false
     for (const { languageCode, copyIndex, imageRoles } of copyPlan) {
       const languageLabel = getLanguageLabel(languageCode)
+      const hasSourceImages = (product.images || []).length > 0
       const selectedPromptTemplates = imageRoles
+        .filter(() => hasSourceImages)
         .map((role) => promptTemplatesByRole.get(role))
         .filter(Boolean) as Array<{ prompt_number: number; prompt_role: ProductImageRole; prompt_text: string }>
-
-      if (selectedPromptTemplates.length === 0) {
-        continue
-      }
 
         const seoKeywordBank = seoKeywordBanks.find((bank) =>
           bank.category_id === product.category_id &&
@@ -359,7 +359,7 @@ export async function POST(request: NextRequest) {
             seo_score: qualityReport.seo.score,
             quality_status: qualityReport.status,
             quality_report: qualityReport,
-            status: 'queued',
+            status: selectedPromptTemplates.length > 0 ? 'queued' : 'completed',
           })
           .select()
           .single()
@@ -369,6 +369,10 @@ export async function POST(request: NextRequest) {
         }
 
         createdCopyIds.push(copy.id)
+        if (selectedPromptTemplates.length > 0) {
+          imageCopyIds.push(copy.id)
+          productHasImageJobs = true
+        }
         const images = selectedPromptTemplates.map((prompt) => ({
           copy_id: copy.id,
           prompt_number: prompt.prompt_number,
@@ -389,16 +393,18 @@ export async function POST(request: NextRequest) {
           status: 'queued',
         }))
 
-        await supabase.from('product_copy_images').insert(images)
+        if (images.length > 0) {
+          await supabase.from('product_copy_images').insert(images)
+        }
     }
 
     await supabase
       .from('products')
-      .update({ status: 'queued', error_message: null })
+      .update({ status: productHasImageJobs ? 'queued' : 'completed', error_message: null })
       .eq('id', product.id)
   }
 
-  if (createdCopyIds.length > 0) {
+  if (imageCopyIds.length > 0) {
     const processUrl = new URL('/api/product-copies/process', request.url)
     fetch(processUrl.toString(), {
       method: 'POST',
@@ -406,7 +412,7 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
         Authorization: request.headers.get('authorization') || '',
       },
-      body: JSON.stringify({ copy_ids: createdCopyIds }),
+      body: JSON.stringify({ copy_ids: imageCopyIds }),
     }).catch(() => {
       // Copies remain queued and can be processed later.
     })

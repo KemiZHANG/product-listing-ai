@@ -58,7 +58,7 @@ function imageCopyPlanKey(languageCode: string, copyIndex: number) {
   return `${languageCode}-${copyIndex}`
 }
 
-function sanitizeImageRoles(value: unknown): ProductImageRole[] {
+function sanitizeImageRoles(value: unknown, fallbackToDefault = true): ProductImageRole[] {
   const roles = Array.isArray(value)
     ? value
     : typeof value === 'string'
@@ -68,7 +68,7 @@ function sanitizeImageRoles(value: unknown): ProductImageRole[] {
     .map((role) => normalizeProductImageRole(String(role)))
     .filter(Boolean) as ProductImageRole[]
   const deduped = DEFAULT_PRODUCT_IMAGE_ROLES.filter((role) => normalized.includes(role))
-  return deduped.length > 0 ? deduped : DEFAULT_PRODUCT_IMAGE_ROLES
+  return deduped.length > 0 ? deduped : fallbackToDefault ? DEFAULT_PRODUCT_IMAGE_ROLES : []
 }
 
 function buildImageCopyPlan(
@@ -87,7 +87,7 @@ function buildImageCopyPlan(
         key,
         languageCode: language.code,
         copyIndex,
-        imageRoles: previous ? sanitizeImageRoles(previous.imageRoles) : DEFAULT_PRODUCT_IMAGE_ROLES,
+        imageRoles: previous ? sanitizeImageRoles(previous.imageRoles, false) : DEFAULT_PRODUCT_IMAGE_ROLES,
       }
     })
   })
@@ -143,7 +143,7 @@ function parseImageCopyPlan(product?: Product | null) {
             key: imageCopyPlanKey(languageCode, copyIndex),
             languageCode,
             copyIndex,
-            imageRoles: sanitizeImageRoles(entry.imageRoles),
+            imageRoles: sanitizeImageRoles(entry.imageRoles, false),
           }
         })
         .filter((entry) => PRODUCT_LANGUAGES.some((language) => language.code === entry.languageCode))
@@ -688,11 +688,6 @@ export default function ProductDashboardPage() {
         ? languageCopyCounts
         : { ...languageCopyCounts, en: 1 }
       const imageCopyPlan = buildImageCopyPlan(normalizedCounts, form.imageCopyPlan)
-      const missingImagePlan = imageCopyPlan.find((entry) => entry.imageRoles.length === 0)
-      if (missingImagePlan) {
-        setError('每个语言副本至少需要勾选一种图片类型。')
-        return
-      }
       const maxCopyCount = Math.max(...Object.values(normalizedCounts), 1)
       const payload = {
         id: form.id,
@@ -825,12 +820,6 @@ export default function ProductDashboardPage() {
   const handleGenerate = async (productIds?: string[]) => {
     const targetIds = Array.isArray(productIds) ? productIds : Array.from(selected)
     if (targetIds.length === 0) return
-    const targetIdSet = new Set(targetIds)
-    const productsWithoutImages = products.filter((product) => targetIdSet.has(product.id) && (product.images || []).length === 0)
-    if (productsWithoutImages.length > 0) {
-      setError(`这些 SKU 还没有上传原始参考图，不能生图：${productsWithoutImages.map((product) => product.sku).join('、')}`)
-      return
-    }
     setGenerating(true)
     setError(null)
     try {
@@ -1107,7 +1096,7 @@ export default function ProductDashboardPage() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleGenerate([product.id])}
-                          disabled={generating || (product.images || []).length === 0}
+                          disabled={generating}
                           className="rounded-lg px-2 py-1 text-sm font-semibold text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800 disabled:text-slate-300"
                         >
                           {product.copy_count_generated ? text.regenerateCopy : text.generateCopy}
@@ -1374,6 +1363,13 @@ export default function ProductDashboardPage() {
                               >
                                 {pickText(language, { zh: '只主图', en: 'Main only' })}
                               </button>
+                              <button
+                                type="button"
+                                onClick={() => setCopyImageRoles(entry.key, [])}
+                                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                              >
+                                {pickText(language, { zh: '只生成文案', en: 'Text only' })}
+                              </button>
                             </div>
                           </div>
                           <div className="grid gap-2 sm:grid-cols-3">
@@ -1400,8 +1396,8 @@ export default function ProductDashboardPage() {
                             })}
                           </div>
                           {entry.imageRoles.length === 0 && (
-                            <p className="mt-2 text-xs font-semibold text-red-600">
-                              {pickText(language, { zh: '至少勾选一种图片类型。', en: 'Select at least one image type.' })}
+                            <p className="mt-2 text-xs font-semibold text-slate-500">
+                              {pickText(language, { zh: '该副本只生成标题和描述，不生成图片。', en: 'This copy will generate title and description only.' })}
                             </p>
                           )}
                         </div>
