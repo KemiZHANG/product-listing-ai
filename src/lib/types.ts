@@ -164,9 +164,9 @@ export const COPY_IMAGE_PLAN_ATTRIBUTE_KEY = '__language_copy_plan_v2'
 export type ProductImageRole = 'main' | 'scene' | 'detail'
 
 export const PRODUCT_IMAGE_ROLE_OPTIONS: Array<{ value: ProductImageRole; label: string; description: string }> = [
-  { value: 'main', label: '主图', description: '干净商品展示图' },
-  { value: 'scene', label: '场景图', description: '生活/使用场景图' },
-  { value: 'detail', label: '详情图', description: '卖点/规格信息图' },
+  { value: 'main', label: '主图', description: '干净的商品展示图' },
+  { value: 'scene', label: '场景图', description: '生活或使用场景图' },
+  { value: 'detail', label: '详情图', description: '卖点或规格说明图' },
 ]
 
 export const DEFAULT_PRODUCT_IMAGE_ROLES: ProductImageRole[] = PRODUCT_IMAGE_ROLE_OPTIONS.map((role) => role.value)
@@ -265,7 +265,7 @@ export const LEGACY_PROMPT_ROLES = [
 ]
 
 export const CATEGORY_ICONS = [
-  '🧴', '💄', '🧼', '🧺', '👟', '👗', '🧸', '🎁',
-  '🏠', '🍽️', '🛁', '🛏️', '🌿', '🔧', '🧹', '🪑',
-  '☕', '🍫', '✨', '🧃', '🍜', '🥗', '📦',
+  '🧴', '🪥', '🧼', '💄', '🧽', '🛁', '🧴', '📦',
+  '🥤', '🍽️', '🧃', '✈️', '🍵', '🔟', '🧷', '📱',
+  '☀️', '🎵', '✨', '🌔', '🪒', '🥚', '📘',
 ]

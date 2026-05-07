@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { isAdminEmail } from '@/lib/admin'
+import { isPrimaryAdminEmail } from '@/lib/admin'
 import { getAuthenticatedUser, getServerSupabase } from '@/lib/supabase'
 
 async function requireAdmin(request: NextRequest) {
@@ -8,7 +8,7 @@ async function requireAdmin(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  if (!isAdminEmail(user.email)) {
+  if (!isPrimaryAdminEmail(user.email)) {
     return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
   }
 

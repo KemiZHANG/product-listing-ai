@@ -3,47 +3,37 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import BrandMark from '@/components/BrandMark'
+import LanguageToggle from '@/components/LanguageToggle'
+import { getClientBrandConfig } from '@/lib/brand'
+import { pickText, useUiLanguage } from '@/lib/ui-language'
+import { isPrimaryAdminEmail } from '@/lib/admin'
 import { supabase } from '@/lib/supabase'
-import { isAdminEmail } from '@/lib/admin'
-
-const NAV_LINKS = [
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/', label: 'Products' },
-  { href: '/categories', label: 'Categories' },
-  { href: '/product-outputs', label: 'Product Outputs' },
-  { href: '/outputs', label: 'Image Outputs' },
-  { href: '/seo-keywords', label: 'SEO Keywords' },
-  { href: '/rules', label: 'Rules' },
-  { href: '/settings', label: 'Settings' },
-]
-
-function BrandMark() {
-  return (
-    <span className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-[1rem] bg-gradient-to-br from-amber-100 via-white to-sky-50 shadow-[0_12px_30px_rgba(15,23,42,0.1)] ring-1 ring-amber-200/70 transition-transform duration-200 group-hover:-rotate-2 group-hover:scale-105">
-      <span className="absolute -right-3 -top-3 h-8 w-8 rounded-full bg-sky-200/70 blur-sm" />
-      <svg viewBox="0 0 28 28" className="relative h-6 w-6 text-amber-500" aria-hidden="true">
-        <path
-          d="M7.7 18.8c4.8 3.8 11.8 1.9 14.5-4.5.6-1.4-.7-2.7-2.1-2-5 2.4-8.9.8-11.6-3.9-.8-1.4-2.9-.8-2.9.8 0 3.6.7 7.2 2.1 9.6Z"
-          fill="currentColor"
-        />
-        <path d="M5.8 19.4c3.6-1.5 6.8-1.4 9.9.2" fill="none" stroke="#0f172a" strokeLinecap="round" strokeWidth="2" />
-      </svg>
-    </span>
-  )
-}
 
 export default function Navbar() {
   const pathname = usePathname()
   const router = useRouter()
+  const brand = getClientBrandConfig()
+  const { language } = useUiLanguage()
   const [userEmail, setUserEmail] = useState<string | null>(null)
-  const visibleLinks = isAdminEmail(userEmail)
-    ? [...NAV_LINKS, { href: '/admin/authorized-emails', label: 'Admin' }]
-    : NAV_LINKS
+  const navLinks = [
+    { href: '/dashboard', label: pickText(language, { zh: '概览', en: 'Dashboard' }) },
+    { href: '/', label: pickText(language, { zh: '商品', en: 'Products' }) },
+    { href: '/categories', label: pickText(language, { zh: '类目', en: 'Categories' }) },
+    { href: '/product-outputs', label: pickText(language, { zh: '副本输出', en: 'Product Outputs' }) },
+    { href: '/outputs', label: pickText(language, { zh: '图片输出', en: 'Image Outputs' }) },
+    { href: '/seo-keywords', label: pickText(language, { zh: 'SEO 关键词', en: 'SEO Keywords' }) },
+    { href: '/rules', label: pickText(language, { zh: '规则', en: 'Rules' }) },
+    { href: '/settings', label: pickText(language, { zh: '设置', en: 'Settings' }) },
+  ]
+
+  const visibleLinks = isPrimaryAdminEmail(userEmail)
+    ? [...navLinks, { href: '/admin/authorized-emails', label: pickText(language, { zh: '管理', en: 'Admin' }) }]
+    : navLinks
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      const email = data.user?.email ?? null
-      setUserEmail(email)
+      setUserEmail(data.user?.email ?? null)
     })
   }, [])
 
@@ -60,7 +50,7 @@ export default function Navbar() {
           <Link href="/" className="group flex shrink-0 items-center gap-3 text-lg font-semibold text-slate-950">
             <BrandMark />
             <span className="tracking-tight">
-              Nano Listing <span className="text-sky-700">AI</span>
+              {brand.appName}
             </span>
           </Link>
 
@@ -86,6 +76,7 @@ export default function Navbar() {
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
+          <LanguageToggle />
           {userEmail && (
             <span className="hidden max-w-[260px] truncate rounded-2xl border border-slate-200 bg-white/80 px-3 py-2 text-sm font-medium text-slate-600 shadow-sm xl:inline">
               {userEmail}
@@ -95,7 +86,7 @@ export default function Navbar() {
             onClick={handleLogout}
             className="rounded-xl border border-slate-200 bg-white/85 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors duration-200 hover:border-slate-300 hover:bg-white hover:text-slate-950"
           >
-            Logout
+            {pickText(language, { zh: '退出', en: 'Logout' })}
           </button>
         </div>
       </div>

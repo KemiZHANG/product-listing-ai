@@ -120,6 +120,22 @@ export default function JobsPage() {
     }
   }, [loading, fetchJobs])
 
+  // Fetch job detail
+  const fetchJobDetail = useCallback(async (jobId: string) => {
+    setDetailLoading(true)
+    try {
+      const res = await apiFetch(`/api/jobs/${jobId}`)
+      if (res.ok) {
+        const data = await res.json()
+        setJobDetail(data)
+      }
+    } catch {
+      // silent
+    } finally {
+      setDetailLoading(false)
+    }
+  }, [])
+
   // Auto-refresh when any job is running or queued
   useEffect(() => {
     const hasActive = jobs.some((j) => j.status === 'running' || j.status === 'queued')
@@ -142,23 +158,7 @@ export default function JobsPage() {
         intervalRef.current = null
       }
     }
-  }, [jobs, expandedJobId, fetchJobs])
-
-  // Fetch job detail
-  const fetchJobDetail = useCallback(async (jobId: string) => {
-    setDetailLoading(true)
-    try {
-      const res = await apiFetch(`/api/jobs/${jobId}`)
-      if (res.ok) {
-        const data = await res.json()
-        setJobDetail(data)
-      }
-    } catch {
-      // silent
-    } finally {
-      setDetailLoading(false)
-    }
-  }, [])
+  }, [jobs, expandedJobId, fetchJobDetail, fetchJobs])
 
   const toggleExpand = (jobId: string) => {
     if (expandedJobId === jobId) {

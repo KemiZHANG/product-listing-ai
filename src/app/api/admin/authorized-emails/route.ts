@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { isAdminEmail, normalizeEmail } from '@/lib/admin'
+import { isPrimaryAdminEmail, normalizeEmail } from '@/lib/admin'
 import { getAuthenticatedUser, getServerSupabase } from '@/lib/supabase'
 
 function tableMissingError(error: { code?: string; message?: string } | null) {
@@ -14,7 +14,7 @@ async function requireAdmin(request: NextRequest) {
     return { user: null, response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
   }
 
-  if (!isAdminEmail(user.email)) {
+  if (!isPrimaryAdminEmail(user.email)) {
     return { user: null, response: NextResponse.json({ error: 'Admin access required' }, { status: 403 }) }
   }
 

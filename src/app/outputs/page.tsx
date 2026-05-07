@@ -4,11 +4,15 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
+import { signStorageUrls } from '@/lib/signed-storage'
 import type { Category, Output } from '@/lib/types'
 import Navbar from '@/components/Navbar'
+import SignedImage from '@/components/SignedImage'
+import { pickText, useUiLanguage } from '@/lib/ui-language'
 
 export default function OutputsPage() {
   const router = useRouter()
+  const { language } = useUiLanguage()
   const [loading, setLoading] = useState(true)
   const [categories, setCategories] = useState<Category[]>([])
   const [outputs, setOutputs] = useState<Output[]>([])
@@ -31,6 +35,49 @@ export default function OutputsPage() {
   const [previewFilename, setPreviewFilename] = useState('')
 
   const limit = 24
+  const text = {
+    loading: pickText(language, { zh: '加载中...', en: 'Loading...' }),
+    eyebrow: pickText(language, { zh: '独立图片输出', en: 'Standalone image outputs' }),
+    title: pickText(language, { zh: '图片输出', en: 'Image outputs' }),
+    description: pickText(language, {
+      zh: '这里展示从类目页批量运行的图片结果。它读取类目参考图和类目指令，不读取商品表里的 SKU 原图。',
+      en: 'This page shows image results generated in batch from category workflows. It uses category references and prompts instead of SKU source images.',
+    }),
+    category: pickText(language, { zh: '类目', en: 'Category' }),
+    allCategories: pickText(language, { zh: '全部类目', en: 'All categories' }),
+    date: pickText(language, { zh: '日期', en: 'Date' }),
+    promptNumber: pickText(language, { zh: 'Prompt 编号', en: 'Prompt number' }),
+    all: pickText(language, { zh: '全部', en: 'All' }),
+    search: pickText(language, { zh: 'SKU / 名称搜索', en: 'SKU / name search' }),
+    searchPlaceholder: pickText(language, { zh: '输入 SKU 或图片名称...', en: 'Search by SKU or image name...' }),
+    apply: pickText(language, { zh: '应用筛选', en: 'Apply filters' }),
+    clear: pickText(language, { zh: '清除', en: 'Clear' }),
+    summary: (total: number, selectedCount: number) => pickText(language, {
+      zh: `共 ${total} 张图片，当前已选 ${selectedCount} 张`,
+      en: `${total} images total, ${selectedCount} selected`,
+    }),
+    fetching: pickText(language, { zh: '加载中...', en: 'Loading...' }),
+    selectPage: pickText(language, { zh: '全选当前页', en: 'Select page' }),
+    clearSelection: pickText(language, { zh: '清空选择', en: 'Clear selection' }),
+    downloading: pickText(language, { zh: '下载中...', en: 'Downloading...' }),
+    downloadSelected: (count: number) => pickText(language, {
+      zh: `下载所选 (${count})`,
+      en: `Download selected (${count})`,
+    }),
+    empty: pickText(language, { zh: '暂无输出图片。', en: 'No image outputs yet.' }),
+    selectOutput: (filename: string) => pickText(language, {
+      zh: `选择 ${filename}`,
+      en: `Select ${filename}`,
+    }),
+    download: pickText(language, { zh: '下载', en: 'Download' }),
+    previous: pickText(language, { zh: '上一页', en: 'Previous' }),
+    next: pickText(language, { zh: '下一页', en: 'Next' }),
+    page: (current: number, pageCount: number) => pickText(language, {
+      zh: `第 ${current} / ${pageCount} 页`,
+      en: `Page ${current} / ${pageCount}`,
+    }),
+    close: pickText(language, { zh: '关闭', en: 'Close' }),
+  }
 
   // Auth check
   useEffect(() => {
@@ -80,15 +127,7 @@ export default function OutputsPage() {
         setOutputs(data.data)
         setTotal(data.total)
         setTotalPages(data.totalPages)
-        const signedUrls = await Promise.all(
-          data.data.map(async (output: Output) => {
-            const { data: signed } = await supabase.storage
-              .from('outputs')
-              .createSignedUrl(output.storage_path, 60 * 60)
-            return [output.storage_path, signed?.signedUrl ?? ''] as const
-          })
-        )
-        setOutputUrls(Object.fromEntries(signedUrls))
+        setOutputUrls(await signStorageUrls('outputs', data.data.map((output: Output) => output.storage_path)))
         setSelected((previous) => {
           const currentIds = new Set((data.data || []).map((output: Output) => output.id))
           return new Set(Array.from(previous).filter((id) => currentIds.has(id)))
@@ -125,22 +164,18 @@ export default function OutputsPage() {
     if (!loading && categorySlug === '' && date === '' && promptNumber === '' && search === '') {
       fetchOutputs()
     }
-  }, [categorySlug, date, promptNumber, search])
+  }, [categorySlug, date, fetchOutputs, loading, promptNumber, search])
 
   const openPreview = async (output: Output) => {
-    const { data } = await supabase.storage
-      .from('outputs')
-      .createSignedUrl(output.storage_path, 60 * 60)
-    setPreviewUrl(data?.signedUrl ?? outputUrls[output.storage_path] ?? '')
+    const urls = await signStorageUrls('outputs', [output.storage_path])
+    setPreviewUrl(urls[output.storage_path] ?? outputUrls[output.storage_path] ?? '')
     setPreviewFilename(output.output_filename)
   }
 
   const handleDownload = async (output: Output) => {
-    const { data } = await supabase.storage
-      .from('outputs')
-      .createSignedUrl(output.storage_path, 60 * 60)
     const link = document.createElement('a')
-    link.href = data?.signedUrl ?? outputUrls[output.storage_path] ?? ''
+    const urls = await signStorageUrls('outputs', [output.storage_path])
+    link.href = urls[output.storage_path] ?? outputUrls[output.storage_path] ?? ''
     link.download = output.output_filename
     link.target = '_blank'
     document.body.appendChild(link)
@@ -183,7 +218,7 @@ export default function OutputsPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="text-gray-500">加载中...</div>
+        <div className="text-gray-500">{text.loading}</div>
       </div>
     )
   }
@@ -194,9 +229,9 @@ export default function OutputsPage() {
 
       <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6">
         <div className="mb-7">
-          <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">Standalone image outputs</p>
-          <h2 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">单纯图片输出</h2>
-          <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">这里展示从类目页批量运行的图片结果。它读取类目参考图和类目指令，不读取商品表里的 SKU 原图。</p>
+          <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">{text.eyebrow}</p>
+          <h2 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">{text.title}</h2>
+          <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">{text.description}</p>
         </div>
 
         {/* Filter bar */}
@@ -204,13 +239,13 @@ export default function OutputsPage() {
           <div className="flex flex-wrap items-end gap-4">
             {/* Category */}
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">类目</label>
+              <label className="mb-1 block text-xs font-medium text-gray-600">{text.category}</label>
               <select
                 value={categorySlug}
                 onChange={(e) => setCategorySlug(e.target.value)}
                 className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option value="">全部类目</option>
+                <option value="">{text.allCategories}</option>
                 {categories.map((cat) => (
                   <option key={cat.id} value={cat.slug}>
                     {cat.icon} {cat.name_zh}
@@ -221,7 +256,7 @@ export default function OutputsPage() {
 
             {/* Date */}
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">日期</label>
+              <label className="mb-1 block text-xs font-medium text-gray-600">{text.date}</label>
               <input
                 type="date"
                 value={date}
@@ -232,13 +267,13 @@ export default function OutputsPage() {
 
             {/* Prompt number */}
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">Prompt 编号</label>
+              <label className="mb-1 block text-xs font-medium text-gray-600">{text.promptNumber}</label>
               <select
                 value={promptNumber}
                 onChange={(e) => setPromptNumber(e.target.value)}
                 className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option value="">全部</option>
+                <option value="">{text.all}</option>
                 {[1, 2, 3, 4, 5, 6].map((n) => (
                   <option key={n} value={n}>
                     P{n}
@@ -249,12 +284,12 @@ export default function OutputsPage() {
 
             {/* Search */}
             <div className="min-w-[200px] flex-1">
-              <label className="mb-1 block text-xs font-medium text-gray-600">SKU / 名称搜索</label>
+              <label className="mb-1 block text-xs font-medium text-gray-600">{text.search}</label>
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="输入 SKU 或图片名称..."
+                placeholder={text.searchPlaceholder}
                 className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
@@ -265,13 +300,13 @@ export default function OutputsPage() {
                 onClick={handleApplyFilter}
                 className="rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
               >
-                应用筛选
+                {text.apply}
               </button>
               <button
                 onClick={handleClearFilter}
                 className="rounded-md border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                清除
+                {text.clear}
               </button>
             </div>
           </div>
@@ -281,9 +316,9 @@ export default function OutputsPage() {
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-sm text-gray-500">
-              共 {total} 张图片，当前已选 {selected.size} 张
+              {text.summary(total, selected.size)}
             </p>
-            {fetching && <span className="text-xs text-gray-400">加载中...</span>}
+            {fetching && <span className="text-xs text-gray-400">{text.fetching}</span>}
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -291,21 +326,21 @@ export default function OutputsPage() {
               disabled={outputs.length === 0}
               className="rounded-xl border border-slate-300 bg-white/90 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
             >
-              全选当前页
+              {text.selectPage}
             </button>
             <button
               onClick={() => setSelected(new Set())}
               disabled={selected.size === 0}
               className="rounded-xl border border-slate-300 bg-white/90 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
             >
-              清空选择
+              {text.clearSelection}
             </button>
             <button
               onClick={downloadSelectedOutputs}
               disabled={selected.size === 0 || downloadingSelected}
               className="rounded-xl bg-[linear-gradient(135deg,#071228,#0f172a)] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-slate-950/15 hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-none disabled:bg-slate-300 disabled:shadow-none"
             >
-              {downloadingSelected ? '下载中...' : `下载所选 (${selected.size})`}
+              {downloadingSelected ? text.downloading : text.downloadSelected(selected.size)}
             </button>
           </div>
         </div>
@@ -313,7 +348,7 @@ export default function OutputsPage() {
         {/* Output grid */}
         {outputs.length === 0 ? (
           <div className="rounded-[1.4rem] bg-white/88 p-12 text-center shadow-sm">
-            <p className="text-gray-500">暂无输出图片。</p>
+            <p className="text-gray-500">{text.empty}</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
@@ -328,7 +363,7 @@ export default function OutputsPage() {
                     checked={selected.has(output.id)}
                     onChange={() => toggleSelected(output.id)}
                     className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                    aria-label={`选择 ${output.output_filename}`}
+                    aria-label={text.selectOutput(output.output_filename)}
                   />
                 </label>
                 {/* Image preview */}
@@ -337,11 +372,11 @@ export default function OutputsPage() {
                   className="block w-full"
                 >
                   <div className="aspect-square bg-gray-100">
-                    <img
+                    <SignedImage
                       src={getImageUrl(output.storage_path)}
                       alt={output.output_filename}
+                      fill
                       className="h-full w-full object-cover"
-                      loading="lazy"
                     />
                   </div>
                 </button>
@@ -366,7 +401,7 @@ export default function OutputsPage() {
                 <button
                   onClick={() => handleDownload(output)}
                   className="absolute right-2 top-2 rounded-md bg-white/90 p-1.5 text-gray-600 shadow-sm opacity-0 transition-opacity hover:bg-white hover:text-gray-900 group-hover:opacity-100"
-                  title="下载"
+                  title={text.download}
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" />
@@ -385,17 +420,17 @@ export default function OutputsPage() {
               disabled={page <= 1}
               className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
             >
-              上一页
+              {text.previous}
             </button>
             <span className="text-sm text-gray-600">
-              第 {page} / {totalPages} 页
+              {text.page(page, totalPages)}
             </span>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
               className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
             >
-              下一页
+              {text.next}
             </button>
           </div>
         )}
@@ -415,12 +450,14 @@ export default function OutputsPage() {
                 onClick={() => { setPreviewUrl(null); setPreviewFilename('') }}
                 className="rounded-md bg-white/20 px-3 py-1 text-sm text-white hover:bg-white/30 transition-colors"
               >
-                关闭
+                {text.close}
               </button>
             </div>
-            <img
+            <SignedImage
               src={previewUrl}
               alt={previewFilename}
+              width={1200}
+              height={1200}
               className="max-h-[80vh] max-w-[90vw] rounded-lg object-contain"
             />
           </div>

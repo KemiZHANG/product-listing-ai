@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { getCategoryPromptSubject } from './category-prompts'
 import { PRESET_CATEGORIES } from './presets'
 import { defaultDetailPrompt, defaultMainPrompt, defaultScenePrompt } from './product-generation'
 import { normalizeProductImageRole } from './types'
@@ -15,9 +16,13 @@ function pickPresetPrompt(
   const legacy = preset.prompts.find((prompt) => prompt.prompt_number === legacyNumber)?.prompt_text
   if (legacy) return legacy
 
-  if (role === 'main') return defaultMainPrompt(preset.name_zh, 1)
-  if (role === 'scene') return defaultScenePrompt(preset.name_zh, 1)
-  return defaultDetailPrompt(preset.name_zh, 1)
+  const categorySubject = getCategoryPromptSubject({
+    slug: (preset as { slug?: string }).slug,
+    name_zh: preset.name_zh,
+  })
+  if (role === 'main') return defaultMainPrompt(categorySubject, 1)
+  if (role === 'scene') return defaultScenePrompt(categorySubject, 1)
+  return defaultDetailPrompt(categorySubject, 1)
 }
 
 export async function ensurePresetCategoriesForUser(

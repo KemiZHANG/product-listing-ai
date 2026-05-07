@@ -3,8 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
+import PaginationBar from '@/components/PaginationBar'
+import SignedImage from '@/components/SignedImage'
 import { apiFetch } from '@/lib/api'
+import { subscribeToTableChanges } from '@/lib/client-realtime'
 import { supabase } from '@/lib/supabase'
+import { getCategoryDisplayName, pickText, useUiLanguage } from '@/lib/ui-language'
+import { signStorageUrls } from '@/lib/signed-storage'
 import {
   COPY_IMAGE_PLAN_ATTRIBUTE_KEY,
   COPY_PLAN_ATTRIBUTE_KEY,
@@ -22,6 +27,8 @@ import {
   formatShopeeCategorySelection,
 } from '@/lib/shopee-categories'
 import type { ShopeeCategoryNode, ShopeeCategorySelection } from '@/lib/shopee-categories'
+
+const AUTO_REFRESH_INTERVAL_MS = 60 * 1000
 
 type ProductForm = {
   id?: string
@@ -283,6 +290,7 @@ const statCards = [
 
 export default function ProductDashboardPage() {
   const router = useRouter()
+  const { language } = useUiLanguage()
   const [loading, setLoading] = useState(true)
   const [fetching, setFetching] = useState(false)
   const [products, setProducts] = useState<Product[]>([])
@@ -304,6 +312,113 @@ export default function ProductDashboardPage() {
   const [importing, setImporting] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [sourceDragActive, setSourceDragActive] = useState(false)
+  const [searchText, setSearchText] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'missing_images' | 'generated' | 'pending'>('all')
+  const [productPage, setProductPage] = useState(1)
+  const text = language === 'en'
+    ? {
+        loading: 'Loading...',
+        heroEyebrow: 'Listing content studio',
+        heroBadge: 'Up to 3 images: main / scene / detail',
+        heroTitle: 'Product listing workspace',
+        heroDescription: 'Manage SKUs, reference images, categories, titles, descriptions, and multilingual copies in one place.',
+        createProduct: 'New product',
+        importing: 'Importing...',
+        importFile: 'Import Excel/CSV',
+        generating: 'Creating...',
+        generateSelected: (count: number) => `Generate selected (${count})`,
+        statLabels: {
+          products: 'Products',
+          images: 'Source images',
+          copies: 'Planned copies',
+          columns: 'Global fields',
+        },
+        searchLabel: 'Search products',
+        searchPlaceholder: 'SKU, title, description, or Shopee category',
+        categoryLabel: 'Category',
+        allCategories: 'All categories',
+        statusLabel: 'Status',
+        statusAll: 'All',
+        statusMissingImages: 'Missing source images',
+        statusPending: 'Ready to generate',
+        statusGenerated: 'Copies generated',
+        productCount: (count: number) => `${count} products`,
+        globalAttributes: 'Global attributes',
+        addAttributePlaceholder: 'Add a global field, for example brand / material / color',
+        addAttribute: 'Add field',
+        deleteAttributeTitle: 'Delete this attribute field',
+        sourceImages: 'Source images',
+        sourceTitle: 'Source title',
+        sourceDescription: 'Source description',
+        categoryHeader: 'Category',
+        shopeeCategoryHeader: 'Shopee category',
+        copiesHeader: 'Copies / languages',
+        statusHeader: 'Status',
+        actionsHeader: 'Actions',
+        emptyTitle: 'No products yet',
+        emptyDescription: 'Create a SKU and upload reference images to start generating listing content.',
+        noCategory: 'Not selected',
+        emptyCell: 'Not filled',
+        missingSourceImages: 'Missing source images',
+        edit: 'Edit',
+        delete: 'Delete',
+        uploadSourceImages: 'Upload images',
+        generateCopy: 'Generate copy',
+        regenerateCopy: 'Regenerate copy',
+        close: 'Close',
+      }
+    : {
+        loading: '加载中...',
+        heroEyebrow: '商品内容工作台',
+        heroBadge: '最多 3 张图：主图 / 场景图 / 详情图',
+        heroTitle: '商品素材生成工作台',
+        heroDescription: '统一管理 SKU、参考图、类目、标题、描述和多语言副本，集中处理商品内容生成。',
+        createProduct: '新建商品',
+        importing: '导入中...',
+        importFile: '导入 Excel/CSV',
+        generating: '创建中...',
+        generateSelected: (count: number) => `生成已选商品 (${count})`,
+        statLabels: {
+          products: '商品',
+          images: '原始参考图',
+          copies: '计划副本',
+          columns: '全局属性列',
+        },
+        searchLabel: '搜索商品',
+        searchPlaceholder: 'SKU、标题、描述或 Shopee 类目',
+        categoryLabel: '类目',
+        allCategories: '全部类目',
+        statusLabel: '状态',
+        statusAll: '全部',
+        statusMissingImages: '缺少原图',
+        statusPending: '待生成',
+        statusGenerated: '已生成副本',
+        productCount: (count: number) => `${count} 个商品`,
+        globalAttributes: '全局属性',
+        addAttributePlaceholder: '新增全局字段，例如品牌 / 材质 / 颜色',
+        addAttribute: '添加字段',
+        deleteAttributeTitle: '删除这个属性字段',
+        sourceImages: '原图',
+        sourceTitle: '原始标题',
+        sourceDescription: '原始描述',
+        categoryHeader: '类目',
+        shopeeCategoryHeader: 'Shopee 类目',
+        copiesHeader: '副本 / 语言',
+        statusHeader: '状态',
+        actionsHeader: '操作',
+        emptyTitle: '还没有商品',
+        emptyDescription: '先新建一个 SKU 并上传参考图，再开始生成商品内容。',
+        noCategory: '未选择',
+        emptyCell: '未填写',
+        missingSourceImages: '缺少原图',
+        edit: '编辑',
+        delete: '删除',
+        uploadSourceImages: '上传原图',
+        generateCopy: '生成副本',
+        regenerateCopy: '重新生成副本',
+        close: '关闭',
+      }
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -339,16 +454,6 @@ export default function ProductDashboardPage() {
       setCategories(categoriesData || [])
       setColumns(columnsData || [])
 
-      const paths = (productsData || []).flatMap((product: Product) =>
-        (product.images || []).slice(0, 4).map((image) => image.storage_path)
-      )
-      const signedUrls = await Promise.all(
-        paths.map(async (path: string) => {
-          const { data } = await supabase.storage.from('images').createSignedUrl(path, 60 * 60)
-          return [path, data?.signedUrl || ''] as const
-        })
-      )
-      setImageUrls(Object.fromEntries(signedUrls))
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败')
     } finally {
@@ -365,6 +470,118 @@ export default function ProductDashboardPage() {
     const copyTarget = products.reduce((sum, product) => sum + languageCopyTotal(product), 0)
     return { imageCount, copyTarget }
   }, [products])
+
+  const filteredProducts = useMemo(() => {
+    const term = searchText.trim().toLowerCase()
+    return products.filter((product) => {
+      if (categoryFilter && product.category_id !== categoryFilter) return false
+
+      if (statusFilter === 'missing_images' && (product.images || []).length > 0) return false
+      if (statusFilter === 'generated' && !product.copy_count_generated) return false
+      if (statusFilter === 'pending' && ((product.images || []).length === 0 || product.copy_count_generated)) return false
+
+      if (!term) return true
+
+      const categoryName = product.categories
+        ? `${product.categories.name_zh || ''} ${product.categories.slug || ''} ${getCategoryDisplayName(product.categories, language)}`
+        : ''
+      const shopeeCategory = formatShopeeCategorySelection(productShopeeCategory(product))
+      return [
+        product.sku,
+        product.source_title || '',
+        product.source_description || '',
+        categoryName,
+        shopeeCategory,
+      ].some((value) => value.toLowerCase().includes(term))
+    })
+  }, [categoryFilter, language, products, searchText, statusFilter])
+
+  const productTotalPages = Math.max(1, Math.ceil(filteredProducts.length / 24))
+  const pagedProducts = useMemo(() => {
+    const safePage = Math.min(productPage, productTotalPages)
+    const start = (safePage - 1) * 24
+    return filteredProducts.slice(start, start + 24)
+  }, [filteredProducts, productPage, productTotalPages])
+
+  useEffect(() => {
+    setProductPage(1)
+  }, [categoryFilter, searchText, statusFilter])
+
+  useEffect(() => {
+    if (productPage > productTotalPages) {
+      setProductPage(productTotalPages)
+    }
+  }, [productPage, productTotalPages])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadPageImageUrls() {
+      const paths = pagedProducts.flatMap((product) =>
+        (product.images || []).slice(0, 4).map((image) => image.storage_path)
+      )
+
+      try {
+        const urls = await signStorageUrls('images', paths)
+        if (!cancelled) {
+          setImageUrls((previous) => ({ ...previous, ...urls }))
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError((current) => current || (err instanceof Error ? err.message : '鍥剧墖鍔犺浇澶辫触'))
+        }
+      }
+    }
+
+    void loadPageImageUrls()
+
+    return () => {
+      cancelled = true
+    }
+  }, [pagedProducts])
+
+  useEffect(() => {
+    if (loading) return
+
+    const handleWindowFocus = () => {
+      void fetchAll()
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchAll()
+      }
+    }
+
+    window.addEventListener('focus', handleWindowFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    const intervalId = window.setInterval(() => {
+      void fetchAll()
+    }, AUTO_REFRESH_INTERVAL_MS)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', handleWindowFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [fetchAll, loading])
+
+  useEffect(() => {
+    if (loading) return
+
+    return subscribeToTableChanges(
+      'products-page-realtime',
+      [
+        { table: 'products' },
+        { table: 'product_images' },
+        { table: 'product_copies' },
+      ],
+      () => {
+        void fetchAll()
+      },
+      { debounceMs: 500 }
+    )
+  }, [fetchAll, loading])
 
   const toggleSelected = (id: string) => {
     setSelected((previous) => {
@@ -653,7 +870,7 @@ export default function ProductDashboardPage() {
   if (loading) {
     return (
       <div className="app-shell flex min-h-screen items-center justify-center text-sm text-slate-500">
-        Loading...
+        {text.loading}
       </div>
     )
   }
@@ -666,31 +883,31 @@ export default function ProductDashboardPage() {
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div>
               <div className="flex flex-wrap items-center gap-3">
-                <p className="hero-kicker text-sm font-semibold uppercase">Listing content studio</p>
-                <span className="command-card rounded-full px-3 py-1 text-xs font-semibold text-sky-50">2 主图 + 2 场景 + 2 详情图</span>
+                <p className="hero-kicker text-sm font-semibold uppercase">{text.heroEyebrow}</p>
+                <span className="command-card rounded-full px-3 py-1 text-xs font-semibold text-sky-50">{text.heroBadge}</span>
               </div>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-4xl">电商素材生成工作台</h1>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-4xl">{text.heroTitle}</h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-200">
-                统一管理 SKU、参考图、标题、描述、类目和多语言副本，一次生成商品图、标题与描述。
+                {text.heroDescription}
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
               <button onClick={openCreate} className="rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-slate-950 shadow-xl shadow-black/20 transition-transform hover:-translate-y-0.5 hover:bg-sky-50">
-                新增商品
+                {text.createProduct}
               </button>
               <button
                 onClick={() => importInputRef.current?.click()}
                 disabled={importing}
                 className="command-card rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-transform hover:-translate-y-0.5 disabled:opacity-50"
               >
-                {importing ? '导入中...' : '导入 Excel/CSV'}
+                {importing ? text.importing : text.importFile}
               </button>
               <button
                 onClick={() => handleGenerate()}
                 disabled={selected.size === 0 || generating}
                 className="rounded-xl bg-emerald-400 px-5 py-2.5 text-sm font-semibold text-slate-950 shadow-xl shadow-emerald-900/20 transition-transform hover:-translate-y-0.5 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
               >
-                {generating ? '创建中...' : `生成/重新生成已选商品 (${selected.size})`}
+                {generating ? text.generating : text.generateSelected(selected.size)}
               </button>
             </div>
           </div>
@@ -711,7 +928,9 @@ export default function ProductDashboardPage() {
                     </span>
                     <div>
                       <div className="metric-number text-2xl font-semibold tracking-tight text-white">{value}</div>
-                      <div className="mt-1 text-sm text-slate-300">{card.label}</div>
+                      <div className="mt-1 text-sm text-slate-300">
+                        {text.statLabels[card.key as keyof typeof text.statLabels]}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -723,17 +942,52 @@ export default function ProductDashboardPage() {
         {error && <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700 shadow-sm">{error}</div>}
         {notice && <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700 shadow-sm">{notice}</div>}
 
+        <section className="glass-surface mb-4 grid gap-3 rounded-[1.25rem] p-4 lg:grid-cols-[1fr_220px_220px_auto] lg:items-end">
+          <label className="block">
+            <span className="mb-2 block text-xs font-semibold text-slate-500">{text.searchLabel}</span>
+            <input
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder={text.searchPlaceholder}
+              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-xs font-semibold text-slate-500">{text.categoryLabel}</span>
+            <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50">
+              <option value="">{text.allCategories}</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {getCategoryDisplayName(category, language)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-xs font-semibold text-slate-500">{text.statusLabel}</span>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50">
+              <option value="all">{text.statusAll}</option>
+              <option value="missing_images">{text.statusMissingImages}</option>
+              <option value="pending">{text.statusPending}</option>
+              <option value="generated">{text.statusGenerated}</option>
+            </select>
+          </label>
+          <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600 ring-1 ring-slate-200">
+            {text.productCount(filteredProducts.length)}
+          </div>
+        </section>
+
         <section className="glass-surface mb-4 flex flex-col gap-3 rounded-[1.25rem] p-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-base font-semibold text-slate-950">全局属性</span>
+            <span className="text-base font-semibold text-slate-950">{text.globalAttributes}</span>
             <input
               value={newColumnName}
               onChange={(event) => setNewColumnName(event.target.value)}
-              placeholder="新增全局属性，如品牌/材质/颜色"
+              placeholder={text.addAttributePlaceholder}
               className="w-80 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm focus:border-slate-900 focus:outline-none"
             />
             <button onClick={handleAddColumn} className="rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">
-              添加属性列
+              {text.addAttribute}
             </button>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -742,7 +996,7 @@ export default function ProductDashboardPage() {
                 key={column.id}
                 onClick={() => handleDeleteColumn(column)}
                 className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-                title="点击删除属性列"
+                title={text.deleteAttributeTitle}
               >
                 {column.name} ×
               </button>
@@ -757,19 +1011,19 @@ export default function ProductDashboardPage() {
                 <tr>
                   <th className="w-10 px-3 py-3"></th>
                   <th className="px-3 py-3">SKU</th>
-                  <th className="px-3 py-3">原图</th>
-                  <th className="min-w-[220px] px-3 py-3">原始标题</th>
-                  <th className="min-w-[260px] px-3 py-3">原始描述</th>
-                  <th className="px-3 py-3">类目</th>
-                  <th className="min-w-[240px] px-3 py-3">Shopee 类目</th>
-                  <th className="px-3 py-3">副本/语言</th>
+                  <th className="px-3 py-3">{text.sourceImages}</th>
+                  <th className="min-w-[220px] px-3 py-3">{text.sourceTitle}</th>
+                  <th className="min-w-[260px] px-3 py-3">{text.sourceDescription}</th>
+                  <th className="px-3 py-3">{text.categoryHeader}</th>
+                  <th className="min-w-[240px] px-3 py-3">{text.shopeeCategoryHeader}</th>
+                  <th className="px-3 py-3">{text.copiesHeader}</th>
                   {columns.map((column) => <th key={column.id} className="px-3 py-3">{column.name}</th>)}
-                  <th className="px-3 py-3">状态</th>
-                  <th className="px-3 py-3">操作</th>
+                  <th className="px-3 py-3">{text.statusHeader}</th>
+                  <th className="px-3 py-3">{text.actionsHeader}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {products.length === 0 ? (
+                {pagedProducts.length === 0 ? (
                   <tr>
                     <td colSpan={11 + columns.length} className="px-4 py-20 text-center">
                       <div className="mx-auto flex max-w-lg flex-col items-center">
@@ -777,20 +1031,20 @@ export default function ProductDashboardPage() {
                           📦
                           <span className="absolute -right-2 -top-2 text-xl">✨</span>
                         </div>
-                        <h2 className="text-xl font-semibold text-slate-950">还没有商品。</h2>
-                        <p className="mt-3 text-sm leading-6 text-slate-500">先新增一个 SKU，上传原始参考图，再选择类目生成商品素材。</p>
+                        <h2 className="text-xl font-semibold text-slate-950">{text.emptyTitle}</h2>
+                        <p className="mt-3 text-sm leading-6 text-slate-500">{text.emptyDescription}</p>
                         <div className="mt-6 flex flex-wrap justify-center gap-3">
                           <button type="button" onClick={openCreate} className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-950/15 hover:bg-slate-800">
-                            新增商品
+                            {text.createProduct}
                           </button>
                           <button type="button" onClick={() => importInputRef.current?.click()} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50">
-                            导入 Excel/CSV
+                            {text.importFile}
                           </button>
                         </div>
                       </div>
                     </td>
                   </tr>
-                ) : products.map((product) => (
+                ) : pagedProducts.map((product) => (
                   <tr key={product.id} className={`align-top transition-colors hover:bg-slate-50 ${(product.images || []).length === 0 ? 'bg-red-50/40' : ''}`}>
                     <td className="px-3 py-3">
                       <input className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" type="checkbox" checked={selected.has(product.id)} onChange={() => toggleSelected(product.id)} />
@@ -799,26 +1053,28 @@ export default function ProductDashboardPage() {
                     <td className="px-3 py-3">
                       <div className="flex max-w-[180px] flex-wrap gap-1.5">
                         {(product.images || []).slice(0, 4).map((image) => (
-                          <img
+                          <SignedImage
                             key={image.id}
                             src={imageUrls[image.storage_path]}
                             alt={image.display_name}
+                            width={44}
+                            height={44}
                             className="h-11 w-11 rounded-xl border border-slate-200 object-cover shadow-sm"
                           />
                         ))}
                         <button onClick={() => handleUploadClick(product.id)} className={`h-11 min-w-11 rounded-xl border border-dashed px-2 text-xs font-medium transition-colors ${(product.images || []).length === 0 ? 'border-red-300 bg-white text-red-600 hover:bg-red-50' : 'border-slate-300 text-slate-500 hover:bg-slate-50'}`}>
-                          {(product.images || []).length === 0 ? '上传原图' : '+'}
+                          {(product.images || []).length === 0 ? text.uploadSourceImages : '+'}
                         </button>
                       </div>
                     </td>
                     <td className="px-3 py-3">
-                      <div className="line-clamp-3 max-w-[260px] text-slate-700">{product.source_title || '未填写'}</div>
+                      <div className="line-clamp-3 max-w-[260px] text-slate-700">{product.source_title || text.emptyCell}</div>
                     </td>
                     <td className="px-3 py-3">
-                      <div className="line-clamp-4 max-w-[320px] text-slate-500">{product.source_description || '未填写'}</div>
+                      <div className="line-clamp-4 max-w-[320px] text-slate-500">{product.source_description || text.emptyCell}</div>
                     </td>
                     <td className="px-3 py-3 whitespace-nowrap">
-                      {product.categories ? `${product.categories.icon} ${product.categories.name_zh}` : <span className="text-red-500">未选择</span>}
+                      {product.categories ? `${product.categories.icon} ${getCategoryDisplayName(product.categories, language)}` : <span className="text-red-500">{text.noCategory}</span>}
                     </td>
                     <td className="px-3 py-3 text-slate-500">
                       <div className="line-clamp-3 min-w-[220px] text-xs leading-5">
@@ -826,7 +1082,12 @@ export default function ProductDashboardPage() {
                       </div>
                     </td>
                     <td className="px-3 py-3">
-                      <div className="whitespace-nowrap text-slate-700">{languageCopyTotal(product)} 组</div>
+                      <div className="whitespace-nowrap text-slate-700">
+                        {pickText(language, {
+                          zh: `${languageCopyTotal(product)} 组`,
+                          en: `${languageCopyTotal(product)} copies`,
+                        })}
+                      </div>
                       <div className="mt-1 flex max-w-[200px] flex-wrap gap-1 text-xs text-slate-500">
                         {languageCopySummary(product).map((item) => (
                           <span key={item} className="rounded-lg bg-slate-100 px-2 py-1">{item}</span>
@@ -851,9 +1112,12 @@ export default function ProductDashboardPage() {
                             : 'bg-slate-100 text-slate-600'
                       }`}>
                         {(product.images || []).length === 0
-                          ? '缺少原图'
+                          ? text.missingSourceImages
                           : product.copy_count_generated
-                            ? `已生成 ${product.copy_count_generated} 个副本，可重新生成`
+                            ? pickText(language, {
+                                zh: `已生成 ${product.copy_count_generated} 个副本，可重新生成`,
+                                en: `${product.copy_count_generated} copies generated`,
+                              })
                             : product.status}
                       </span>
                     </td>
@@ -864,10 +1128,10 @@ export default function ProductDashboardPage() {
                           disabled={generating || (product.images || []).length === 0}
                           className="rounded-lg px-2 py-1 text-sm font-semibold text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800 disabled:text-slate-300"
                         >
-                          {product.copy_count_generated ? '重新生成副本' : '生成副本'}
+                          {product.copy_count_generated ? text.regenerateCopy : text.generateCopy}
                         </button>
-                        <button onClick={() => openEdit(product)} className="rounded-lg px-2 py-1 text-sm font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-800">编辑</button>
-                        <button onClick={() => handleDelete(product)} className="rounded-lg px-2 py-1 text-sm font-semibold text-red-600 hover:bg-red-50 hover:text-red-800">删除</button>
+                        <button onClick={() => openEdit(product)} className="rounded-lg px-2 py-1 text-sm font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-800">{text.edit}</button>
+                        <button onClick={() => handleDelete(product)} className="rounded-lg px-2 py-1 text-sm font-semibold text-red-600 hover:bg-red-50 hover:text-red-800">{text.delete}</button>
                       </div>
                     </td>
                   </tr>
@@ -876,7 +1140,20 @@ export default function ProductDashboardPage() {
             </table>
           </div>
         </section>
-        {fetching && <p className="mt-3 text-xs text-slate-400">正在刷新商品数据...</p>}
+        <PaginationBar
+          page={productPage}
+          totalPages={productTotalPages}
+          onPageChange={setProductPage}
+          totalLabel={pickText(language, {
+            zh: `共 ${filteredProducts.length} 个商品，当前第 ${Math.min(productPage, productTotalPages)} / ${productTotalPages} 页`,
+            en: `${filteredProducts.length} products · page ${Math.min(productPage, productTotalPages)} / ${productTotalPages}`,
+          })}
+        />
+        {fetching && (
+          <p className="mt-3 text-xs text-slate-400">
+            {pickText(language, { zh: '正在刷新商品数据...', en: 'Refreshing products...' })}
+          </p>
+        )}
       </main>
 
       <input ref={fileInputRef} type="file" multiple accept="image/*" className="hidden" onChange={handleUpload} />
@@ -887,31 +1164,53 @@ export default function ProductDashboardPage() {
           <form onSubmit={handleSave} className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white shadow-2xl ring-1 ring-slate-900/10">
             <div className="flex items-start justify-between border-b border-slate-200 px-7 py-5">
               <div>
-                <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{form.id ? '编辑商品' : '新增商品'}</h2>
+                <h2 className="text-2xl font-semibold tracking-tight text-slate-950">
+                  {form.id
+                    ? pickText(language, { zh: '编辑商品', en: 'Edit product' })
+                    : pickText(language, { zh: '新增商品', en: 'New product' })}
+                </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  填写商品原始资料，上传参考图后可生成多语言副本和按需勾选的商品图。
+                  {pickText(language, {
+                    zh: '填写商品原始资料，上传参考图后可生成多语言副本和按需勾选的商品图。',
+                    en: 'Add the source listing details and reference images, then generate multilingual copies and selected image types.',
+                  })}
                 </p>
               </div>
-              <button type="button" onClick={closeForm} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="关闭">
+              <button
+                type="button"
+                onClick={closeForm}
+                className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                aria-label={text.close}
+              >
                 ×
               </button>
             </div>
             <div className="grid gap-5 px-7 py-6 md:grid-cols-2">
               <label className="block">
-                <span className="mb-2 block text-sm font-semibold text-slate-700">SKU（唯一）<span className="text-red-500"> *</span></span>
-                <input required value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder="请输入 SKU" />
+                <span className="mb-2 block text-sm font-semibold text-slate-700">
+                  SKU<span className="text-red-500"> *</span>
+                </span>
+                <input
+                  required
+                  value={form.sku}
+                  onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500 focus:ring-4 focus:ring-blue-50"
+                  placeholder={pickText(language, { zh: '请输入 SKU', en: 'Enter SKU' })}
+                />
               </label>
               <label className="block">
-                <span className="mb-2 block text-sm font-semibold text-slate-700">商品类目<span className="text-red-500"> *</span></span>
+                <span className="mb-2 block text-sm font-semibold text-slate-700">{text.categoryHeader}<span className="text-red-500"> *</span></span>
                 <select required value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500 focus:ring-4 focus:ring-blue-50">
-                  <option value="">请选择类目</option>
+                  <option value="">{pickText(language, { zh: '请选择类目', en: 'Select category' })}</option>
                   {categories.map((category) => (
-                    <option key={category.id} value={category.id}>{category.icon} {category.name_zh}</option>
+                    <option key={category.id} value={category.id}>{category.icon} {getCategoryDisplayName(category, language)}</option>
                   ))}
                 </select>
               </label>
               <label className="block md:col-span-2">
-                <span className="mb-2 block text-sm font-semibold text-slate-700">原始参考图（可多选）</span>
+                <span className="mb-2 block text-sm font-semibold text-slate-700">
+                  {pickText(language, { zh: '原始参考图（可多选）', en: 'Reference images (multiple allowed)' })}
+                </span>
                 <div
                   onClick={() => sourceInputRef.current?.click()}
                   onDragEnter={(event) => {
@@ -953,8 +1252,15 @@ export default function ProductDashboardPage() {
                     className="hidden"
                   />
                   <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-white text-2xl shadow-sm ring-1 ring-blue-100">☁</div>
-                  <div className="text-base font-semibold text-slate-900">拖动图片到这里，或从本地选择</div>
-                  <div className="mt-2 text-xs text-slate-500">支持一次选择多张 JPG / PNG / WebP 图片，会追加到当前商品的参考图列表。</div>
+                  <div className="text-base font-semibold text-slate-900">
+                    {pickText(language, { zh: '拖动图片到这里，或从本地选择', en: 'Drag images here or choose from your computer' })}
+                  </div>
+                  <div className="mt-2 text-xs text-slate-500">
+                    {pickText(language, {
+                      zh: '支持一次选择多张 JPG / PNG / WebP 图片，会追加到当前商品的参考图列表。',
+                      en: 'You can add multiple JPG / PNG / WebP files at once.',
+                    })}
+                  </div>
                   <button
                     type="button"
                     onClick={(event) => {
@@ -963,11 +1269,14 @@ export default function ProductDashboardPage() {
                     }}
                     className="mt-4 rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
                   >
-                    从本地选择图片
+                    {pickText(language, { zh: '从本地选择图片', en: 'Choose images' })}
                   </button>
                 </div>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  这些图片会存到该 SKU 下，生成每个副本勾选的图片类型时都会作为参考图一起传入模型。多张原图可以同时参考。
+                  {pickText(language, {
+                    zh: '这些图片会存到该 SKU 下，生成每个副本勾选的图片类型时都会作为参考图一起传入模型。多张原图可以同时参考。',
+                    en: 'These images stay under the SKU and are sent as references when generating each selected image type.',
+                  })}
                 </p>
                 {sourceFiles.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -978,7 +1287,7 @@ export default function ProductDashboardPage() {
                           type="button"
                           onClick={() => removeSourceFile(file)}
                           className="font-semibold text-slate-400 hover:text-red-600"
-                          aria-label={`移除 ${file.name}`}
+                          aria-label={pickText(language, { zh: `移除 ${file.name}`, en: `Remove ${file.name}` })}
                         >
                           ×
                         </button>
@@ -988,16 +1297,16 @@ export default function ProductDashboardPage() {
                 )}
               </label>
               <label className="block md:col-span-2">
-                <span className="mb-2 block text-sm font-semibold text-slate-700">原始标题</span>
-                <input value={form.source_title} onChange={(e) => setForm({ ...form, source_title: e.target.value })} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder="请输入原始标题（建议 10-120 个字符）" />
+                <span className="mb-2 block text-sm font-semibold text-slate-700">{text.sourceTitle}</span>
+                <input value={form.source_title} onChange={(e) => setForm({ ...form, source_title: e.target.value })} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder={pickText(language, { zh: '请输入原始标题（建议 10-120 个字符）', en: 'Enter the original title (10-120 characters recommended)' })} />
               </label>
               <label className="block md:col-span-2">
-                <span className="mb-2 block text-sm font-semibold text-slate-700">原始描述</span>
-                <textarea rows={5} value={form.source_description} onChange={(e) => setForm({ ...form, source_description: e.target.value })} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder="请输入原始描述（建议 20-2000 个字符）" />
+                <span className="mb-2 block text-sm font-semibold text-slate-700">{text.sourceDescription}</span>
+                <textarea rows={5} value={form.source_description} onChange={(e) => setForm({ ...form, source_description: e.target.value })} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder={pickText(language, { zh: '请输入原始描述（建议 20-2000 个字符）', en: 'Enter the original description (20-2000 characters recommended)' })} />
               </label>
               <label className="block md:col-span-2">
-                <span className="mb-2 block text-sm font-semibold text-slate-700">卖点补充（可空）</span>
-                <textarea rows={3} value={form.selling_points} onChange={(e) => setForm({ ...form, selling_points: e.target.value })} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder="请输入商品卖点、功能亮点或使用场景等补充信息" />
+                <span className="mb-2 block text-sm font-semibold text-slate-700">{pickText(language, { zh: '卖点补充（可空）', en: 'Selling points (optional)' })}</span>
+                <textarea rows={3} value={form.selling_points} onChange={(e) => setForm({ ...form, selling_points: e.target.value })} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition-colors focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder={pickText(language, { zh: '请输入商品卖点、功能亮点或使用场景等补充信息', en: 'Add selling points, feature highlights, or usage scenes' })} />
               </label>
               <div className="md:col-span-2">
                 <ShopeeCategoryPicker
@@ -1006,7 +1315,9 @@ export default function ProductDashboardPage() {
                 />
               </div>
               <div className="md:col-span-2">
-                <span className="mb-2 block text-sm font-semibold text-slate-700">各语言副本数量</span>
+                <span className="mb-2 block text-sm font-semibold text-slate-700">
+                  {pickText(language, { zh: '各语言副本数量', en: 'Copies per language' })}
+                </span>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {PRODUCT_LANGUAGES.map((language) => (
                     <label key={language.code} className={`rounded-2xl border px-4 py-3 shadow-sm transition-colors ${
@@ -1030,30 +1341,41 @@ export default function ProductDashboardPage() {
                   ))}
                 </div>
                 <p className="mt-2 text-xs leading-5 text-slate-500">
-                  填 0 表示不生成该语言。例：英语 2、马来语 1、其他 0，会生成 3 个独立副本；每个副本都会重新生成标题、描述，并按勾选生成 1 到 3 张图片。
+                  {pickText(language, {
+                    zh: '填 0 表示不生成该语言。例：英语 2、马来语 1、其他 0，会生成 3 个独立副本；每个副本都会重新生成标题、描述，并按勾选生成 1 到 3 张图片。',
+                    en: 'Set 0 to skip a language. For example, English 2 and Malay 1 will create 3 independent copies, each with its own selected image types.',
+                  })}
                 </p>
               </div>
               <div className="md:col-span-2">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <span className="block text-sm font-semibold text-slate-700">每个副本要生成的图片类型</span>
+                    <span className="block text-sm font-semibold text-slate-700">
+                      {pickText(language, { zh: '每个副本要生成的图片类型', en: 'Image types for each copy' })}
+                    </span>
                     <span className="mt-1 block text-xs text-slate-500">
-                      每个语言副本独立选择。只勾主图就只生成 1 张，全勾最多生成 3 张。
+                      {pickText(language, {
+                        zh: '每个语言副本独立选择。只勾主图就只生成 1 张，全勾最多生成 3 张。',
+                        en: 'Each language copy is configured separately. Main only creates 1 image, and all selected creates up to 3.',
+                      })}
                     </span>
                   </div>
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                    共 {form.imageCopyPlan.reduce((sum, entry) => sum + entry.imageRoles.length, 0)} 张图片任务
+                    {pickText(language, {
+                      zh: `共 ${form.imageCopyPlan.reduce((sum, entry) => sum + entry.imageRoles.length, 0)} 张图片任务`,
+                      en: `${form.imageCopyPlan.reduce((sum, entry) => sum + entry.imageRoles.length, 0)} image tasks`,
+                    })}
                   </span>
                 </div>
                 {form.imageCopyPlan.length > 0 ? (
                   <div className="grid gap-3 lg:grid-cols-2">
                     {form.imageCopyPlan.map((entry) => {
-                      const language = PRODUCT_LANGUAGES.find((item) => item.code === entry.languageCode)
+                      const languageOption = PRODUCT_LANGUAGES.find((item) => item.code === entry.languageCode)
                       return (
                         <div key={entry.key} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                           <div className="mb-3 flex items-center justify-between gap-3">
                             <div className="font-semibold text-slate-900">
-                              {language?.label || entry.languageCode} {entry.copyIndex}
+                              {languageOption?.label || entry.languageCode} {entry.copyIndex}
                             </div>
                             <div className="flex gap-2">
                               <button
@@ -1061,14 +1383,14 @@ export default function ProductDashboardPage() {
                                 onClick={() => setCopyImageRoles(entry.key, DEFAULT_PRODUCT_IMAGE_ROLES)}
                                 className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
                               >
-                                全选
+                                {pickText(language, { zh: '全选', en: 'All' })}
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setCopyImageRoles(entry.key, ['main'])}
                                 className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
                               >
-                                只主图
+                                {pickText(language, { zh: '只主图', en: 'Main only' })}
                               </button>
                             </div>
                           </div>
@@ -1096,7 +1418,9 @@ export default function ProductDashboardPage() {
                             })}
                           </div>
                           {entry.imageRoles.length === 0 && (
-                            <p className="mt-2 text-xs font-semibold text-red-600">至少勾选一种图片类型。</p>
+                            <p className="mt-2 text-xs font-semibold text-red-600">
+                              {pickText(language, { zh: '至少勾选一种图片类型。', en: 'Select at least one image type.' })}
+                            </p>
                           )}
                         </div>
                       )
@@ -1104,7 +1428,7 @@ export default function ProductDashboardPage() {
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                    请先把至少一个语言副本数量设为 1。
+                    {pickText(language, { zh: '请先把至少一个语言副本数量设为 1。', en: 'Set at least one language copy count to 1 first.' })}
                   </div>
                 )}
               </div>
@@ -1124,10 +1448,12 @@ export default function ProductDashboardPage() {
             </div>
             <div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50/70 px-7 py-5">
               <button type="button" onClick={closeForm} className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50">
-                取消
+                {pickText(language, { zh: '取消', en: 'Cancel' })}
               </button>
               <button disabled={saving} className="rounded-xl bg-slate-950 px-7 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-950/15 hover:bg-slate-800 disabled:bg-slate-400 disabled:shadow-none">
-                {saving ? '保存中...' : '保存商品'}
+                {saving
+                  ? pickText(language, { zh: '保存中...', en: 'Saving...' })
+                  : pickText(language, { zh: '保存商品', en: 'Save product' })}
               </button>
             </div>
           </form>

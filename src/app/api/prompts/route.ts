@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
+import { getPromptRoleFromRow, promptNumberForImageRole } from '@/lib/category-prompts'
+import { normalizeProductImageRole } from '@/lib/types'
 
 export async function POST(request: NextRequest) {
   const supabase = getWorkspaceSupabase()
@@ -27,7 +29,56 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Category not found' }, { status: 404 })
   }
 
-  // Get current max prompt_number
+  const normalizedRole = normalizeProductImageRole(prompt_role)
+  if (normalizedRole) {
+    const { data: prompts, error: promptReadError } = await supabase
+      .from('category_prompts')
+      .select('id,prompt_number,prompt_role')
+      .eq('category_id', category_id)
+      .order('prompt_number', { ascending: true })
+
+    if (promptReadError) {
+      return NextResponse.json({ error: promptReadError.message }, { status: 500 })
+    }
+
+    const existing = (prompts || []).find((prompt) => getPromptRoleFromRow(prompt) === normalizedRole)
+    if (existing) {
+      const { data, error } = await supabase
+        .from('category_prompts')
+        .update({
+          prompt_role: normalizedRole,
+          prompt_text,
+        })
+        .eq('id', existing.id)
+        .select()
+        .single()
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+
+      return NextResponse.json(data)
+    }
+
+    const { data, error } = await supabase
+      .from('category_prompts')
+      .insert({
+        category_id,
+        prompt_number: promptNumberForImageRole(normalizedRole),
+        prompt_role: normalizedRole,
+        prompt_text,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json(data, { status: 201 })
+  }
+
+  // Custom prompts are still allowed, but the three built-in image roles stay one per role.
   const { data: maxPrompt } = await supabase
     .from('category_prompts')
     .select('prompt_number')

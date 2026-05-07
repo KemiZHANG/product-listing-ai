@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import { apiFetch } from '@/lib/api'
-import { isAdminEmail } from '@/lib/admin'
+import { isPrimaryAdminEmail } from '@/lib/admin'
 import { supabase } from '@/lib/supabase'
 
 type Authorization = {
@@ -52,7 +52,7 @@ export default function AuthorizedEmailsPage() {
         return
       }
 
-      if (!isAdminEmail(userEmail)) {
+      if (!isPrimaryAdminEmail(userEmail)) {
         router.replace('/')
         return
       }

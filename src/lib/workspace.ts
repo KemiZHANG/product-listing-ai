@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { isAdminEmail } from './admin'
+import { isPrimaryAdminEmail } from './admin'
 import { isBuiltinKeyEmailAuthorized } from './builtin-key-access'
 import { getAuthorizedUser } from './app-auth'
 import { getAppEdition } from './app-edition'
@@ -15,7 +15,7 @@ export async function getWorkspaceKeyForEmail(email: string | null | undefined):
     return EXTERNAL_WORKSPACE_KEY
   }
 
-  if (isAdminEmail(email) || await isBuiltinKeyEmailAuthorized(email)) {
+  if (isPrimaryAdminEmail(email) || await isBuiltinKeyEmailAuthorized(email)) {
     return INTERNAL_WORKSPACE_KEY
   }
   return EXTERNAL_WORKSPACE_KEY

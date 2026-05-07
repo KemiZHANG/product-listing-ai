@@ -4,19 +4,36 @@ import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
+import SignedImage from '@/components/SignedImage'
 import { apiFetch } from '@/lib/api'
 import { supabase } from '@/lib/supabase'
+import { signStorageUrls } from '@/lib/signed-storage'
 import { DEFAULT_PROMPT_ROLES } from '@/lib/types'
 import type { Category, CategoryImage, CategoryPrompt } from '@/lib/types'
+import { getCategoryDisplayName, pickText, useUiLanguage } from '@/lib/ui-language'
 
 type CategoryDetail = Category & {
   prompts: CategoryPrompt[]
   images: CategoryImage[]
 }
 
+const roleLabelMap = {
+  main: { zh: '主图', en: 'Main' },
+  scene: { zh: '场景图', en: 'Scene' },
+  detail: { zh: '详情图', en: 'Detail' },
+  custom: { zh: '自定义', en: 'Custom' },
+} as const
+
+function promptRoleLabel(role: string | null | undefined, language: 'zh' | 'en') {
+  const key = String(role || 'custom') as keyof typeof roleLabelMap
+  const target = roleLabelMap[key] || roleLabelMap.custom
+  return language === 'en' ? target.en : target.zh
+}
+
 export default function CategoryPromptPage() {
   const params = useParams()
   const router = useRouter()
+  const { language } = useUiLanguage()
   const categoryId = params.id as string
   const [loading, setLoading] = useState(true)
   const [category, setCategory] = useState<CategoryDetail | null>(null)
@@ -38,6 +55,76 @@ export default function CategoryPromptPage() {
   const [generatingPrompt, setGeneratingPrompt] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const text = {
+    loading: pickText(language, { zh: '加载中...', en: 'Loading...' }),
+    back: pickText(language, { zh: '返回类目列表', en: 'Back to categories' }),
+    eyebrow: pickText(language, { zh: '类目指令', en: 'Category prompts' }),
+    titleFallback: pickText(language, { zh: '类目指令', en: 'Category prompts' }),
+    description: pickText(language, {
+      zh: '商品生成时会按图片角色调用这里的指令。建议至少维护主图、场景图、详情图 3 类基础指令。',
+      en: 'Product generation reads these prompts by image role. Keep at least the main, scene, and detail prompt groups.',
+    }),
+    referenceTitle: pickText(language, { zh: '类目参考图', en: 'Category reference images' }),
+    referenceDescription: pickText(language, {
+      zh: '只用于“单纯图片生成”。商品生成不会读取这里的图片，只读取商品行里的原始参考图。',
+      en: 'These are only used for image-only generation. Product generation still reads the product-level source images.',
+    }),
+    upload: pickText(language, { zh: '上传图片', en: 'Upload images' }),
+    uploading: pickText(language, { zh: '上传中...', en: 'Uploading...' }),
+    uploadHintTitle: pickText(language, {
+      zh: '拖入类目参考图，或点击从本地选择',
+      en: 'Drag category reference images here or choose from your computer',
+    }),
+    uploadHintBody: pickText(language, {
+      zh: '这些图片会和本类目的指令交叉生成：图片数量 × 指令数量。',
+      en: 'These images are combined with this category’s prompts: image count × prompt count.',
+    }),
+    noImages: pickText(language, { zh: '暂无类目参考图。', en: 'No category reference images yet.' }),
+    delete: pickText(language, { zh: '删除', en: 'Delete' }),
+    edit: pickText(language, { zh: '编辑', en: 'Edit' }),
+    save: pickText(language, { zh: '保存', en: 'Save' }),
+    cancel: pickText(language, { zh: '取消', en: 'Cancel' }),
+    addPrompt: pickText(language, { zh: '新增指令', en: 'Add prompt' }),
+    addPromptButton: pickText(language, { zh: '添加指令', en: 'Add prompt' }),
+    addPromptPlaceholder: pickText(language, { zh: '输入新图片指令', en: 'Enter a new image prompt' }),
+    aiTitle: pickText(language, { zh: 'AI 自动生成新指令', en: 'Generate a new prompt with AI' }),
+    aiDescription: pickText(language, {
+      zh: '输入大致需求和图片类型，系统会结合类目特征与已有结构生成一条可直接保存的新指令。',
+      en: 'Describe the target and image type, and the system will draft a new prompt that you can save directly.',
+    }),
+    imageType: pickText(language, { zh: '图片类型', en: 'Image type' }),
+    style: pickText(language, { zh: '风格要求', en: 'Style notes' }),
+    people: pickText(language, { zh: '人物要求', en: 'People notes' }),
+    scene: pickText(language, { zh: '展示方式/场景', en: 'Scene / display notes' }),
+    need: pickText(language, { zh: '大致需求', en: 'Prompt brief' }),
+    stylePlaceholder: pickText(language, { zh: '如高级、干净、详情页排版', en: 'For example: premium, clean, ecommerce layout' }),
+    peoplePlaceholder: pickText(language, { zh: '如不要人物 / 可出手模 / 可出模特', en: 'For example: no model, hand-only, lifestyle model allowed' }),
+    scenePlaceholder: pickText(language, { zh: '如浴室台面、水感背景、成分卖点布局', en: 'For example: bathroom counter, watery background, ingredient-led layout' }),
+    needPlaceholder: pickText(language, { zh: '写下你想新增的指令方向。', en: 'Describe the new prompt you want to add.' }),
+    aiGenerate: pickText(language, { zh: 'AI 生成并保存指令', en: 'Generate and save prompt' }),
+    aiGenerating: pickText(language, { zh: 'AI 生成并保存中...', en: 'Generating and saving...' }),
+    updateError: pickText(language, { zh: '更新指令失败', en: 'Failed to update prompt' }),
+    addError: pickText(language, { zh: '新增指令失败', en: 'Failed to add prompt' }),
+    deleteError: pickText(language, { zh: '删除指令失败', en: 'Failed to delete prompt' }),
+    loadError: pickText(language, { zh: '类目加载失败', en: 'Failed to load category' }),
+    uploadError: pickText(language, { zh: '上传类目参考图失败', en: 'Failed to upload category images' }),
+    deleteImageError: pickText(language, { zh: '删除图片失败', en: 'Failed to delete image' }),
+    aiError: pickText(language, { zh: 'AI 生成指令失败', en: 'Failed to generate prompt with AI' }),
+    uploadNotice: (count: number) => pickText(language, {
+      zh: `已上传 ${count} 张类目参考图。`,
+      en: `${count} category reference images uploaded.`,
+    }),
+    aiNotice: pickText(language, { zh: 'AI 已生成并保存一条新指令。', en: 'A new AI prompt has been generated and saved.' }),
+    deletePromptConfirm: (number: number) => pickText(language, {
+      zh: `确定删除 P${number} 吗？`,
+      en: `Delete P${number}?`,
+    }),
+    deleteImageConfirm: (name: string) => pickText(language, {
+      zh: `确定删除图片“${name}”吗？`,
+      en: `Delete image "${name}"?`,
+    }),
+  }
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       if (!data.user) router.replace('/login')
@@ -49,22 +136,17 @@ export default function CategoryPromptPage() {
     const res = await apiFetch(`/api/categories/${categoryId}`)
     const data = await res.json().catch(() => null)
     if (!res.ok) {
-      setError(data?.error || '类目加载失败')
+      setError(data?.error || text.loadError)
       return
     }
     setCategory(data)
-
-    const signedUrls = await Promise.all(
-      (data.images || []).map(async (image: CategoryImage) => {
-        const { data: signed } = await supabase.storage.from('images').createSignedUrl(image.storage_path, 60 * 60)
-        return [image.storage_path, signed?.signedUrl || ''] as const
-      })
+    setImageUrls(
+      await signStorageUrls('images', (data.images || []).map((image: CategoryImage) => image.storage_path))
     )
-    setImageUrls(Object.fromEntries(signedUrls))
-  }, [categoryId])
+  }, [categoryId, text.loadError])
 
   useEffect(() => {
-    if (!loading) fetchCategory()
+    if (!loading) void fetchCategory()
   }, [loading, fetchCategory])
 
   const startEdit = (prompt: CategoryPrompt) => {
@@ -82,7 +164,7 @@ export default function CategoryPromptPage() {
     })
     const data = await res.json().catch(() => null)
     if (!res.ok) {
-      setError(data?.error || '更新指令失败')
+      setError(data?.error || text.updateError)
       return
     }
     setEditingId(null)
@@ -99,7 +181,7 @@ export default function CategoryPromptPage() {
     })
     const data = await res.json().catch(() => null)
     if (!res.ok) {
-      setError(data?.error || '新增指令失败')
+      setError(data?.error || text.addError)
       return
     }
     setNewText('')
@@ -108,11 +190,11 @@ export default function CategoryPromptPage() {
   }
 
   const deletePrompt = async (prompt: CategoryPrompt) => {
-    if (!window.confirm(`确定删除 P${prompt.prompt_number} 吗？`)) return
+    if (!window.confirm(text.deletePromptConfirm(prompt.prompt_number))) return
     const res = await apiFetch(`/api/prompts/${prompt.id}`, { method: 'DELETE' })
     const data = await res.json().catch(() => null)
     if (!res.ok) {
-      setError(data?.error || '删除指令失败')
+      setError(data?.error || text.deleteError)
       return
     }
     await fetchCategory()
@@ -135,23 +217,23 @@ export default function CategoryPromptPage() {
           body: formData,
         })
         const data = await res.json().catch(() => null)
-        if (!res.ok) throw new Error(data?.error || `上传 ${file.name} 失败`)
+        if (!res.ok) throw new Error(data?.error || `${file.name} upload failed`)
       }
-      setNotice(`已上传 ${imageFiles.length} 张类目参考图。`)
+      setNotice(text.uploadNotice(imageFiles.length))
       await fetchCategory()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '上传类目参考图失败')
+      setError(err instanceof Error ? err.message : text.uploadError)
     } finally {
       setUploading(false)
     }
   }
 
   const deleteImage = async (image: CategoryImage) => {
-    if (!window.confirm(`确定删除图片「${image.display_name}」吗？`)) return
+    if (!window.confirm(text.deleteImageConfirm(image.display_name))) return
     const res = await apiFetch(`/api/images/${image.id}`, { method: 'DELETE' })
     const data = await res.json().catch(() => null)
     if (!res.ok) {
-      setError(data?.error || '删除图片失败')
+      setError(data?.error || text.deleteImageError)
       return
     }
     await fetchCategory()
@@ -163,21 +245,21 @@ export default function CategoryPromptPage() {
     setError(null)
     setNotice(null)
     try {
-      const roleLabel = DEFAULT_PROMPT_ROLES.find((role) => role.value === aiImageType)?.label || aiImageType
+      const roleLabel = promptRoleLabel(aiImageType, 'en')
       const res = await apiFetch('/api/prompts/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           category_id: category.id,
-          product_type: category.name_zh,
-          image_style: `${roleLabel}。${aiStyle}`.trim(),
+          product_type: getCategoryDisplayName(category, 'en'),
+          image_style: `${roleLabel} ${aiStyle}`.trim(),
           people_mode: aiPeople,
           display_method: aiScene,
           extra_info: aiNeed,
         }),
       })
       const data = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(data?.error || 'AI 生成指令失败')
+      if (!res.ok) throw new Error(data?.error || text.aiError)
 
       const saveRes = await apiFetch('/api/prompts', {
         method: 'POST',
@@ -189,34 +271,38 @@ export default function CategoryPromptPage() {
         }),
       })
       const saveData = await saveRes.json().catch(() => null)
-      if (!saveRes.ok) throw new Error(saveData?.error || '保存 AI 指令失败')
+      if (!saveRes.ok) throw new Error(saveData?.error || text.aiError)
 
       setAiNeed('')
       setAiStyle('')
       setAiPeople('')
       setAiScene('')
-      setNotice('AI 已生成并保存一条新指令。')
+      setNotice(text.aiNotice)
       await fetchCategory()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'AI 生成指令失败')
+      setError(err instanceof Error ? err.message : text.aiError)
     } finally {
       setGeneratingPrompt(false)
     }
   }
 
   if (loading) {
-    return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">Loading...</div>
+    return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">{text.loading}</div>
   }
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(250,204,21,0.14),transparent_30%),radial-gradient(circle_at_88%_8%,rgba(37,99,235,0.12),transparent_34%),linear-gradient(180deg,#ffffff_0%,#f8fafc_46%,#eef2f7_100%)]">
       <Navbar />
       <main className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6">
-        <Link href="/categories" className="mb-5 inline-flex rounded-2xl border border-slate-200 bg-white/85 px-4 py-2 text-sm font-semibold text-blue-600 shadow-sm hover:bg-white">返回类目列表</Link>
+        <Link href="/categories" className="mb-5 inline-flex rounded-2xl border border-slate-200 bg-white/85 px-4 py-2 text-sm font-semibold text-blue-600 shadow-sm hover:bg-white">
+          {text.back}
+        </Link>
         <div className="mb-6 border-b border-slate-200 pb-6">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Category prompts</p>
-          <h1 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">{category ? `${category.icon} ${category.name_zh}` : '类目指令'}</h1>
-          <p className="mt-2 text-sm text-slate-500">商品生成时会按图片角色调用这里的指令。建议至少维护主图、场景图、详情图 3 类基础指令。</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{text.eyebrow}</p>
+          <h1 className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">
+            {category ? `${category.icon} ${getCategoryDisplayName(category, language)}` : text.titleFallback}
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">{text.description}</p>
         </div>
 
         {error && <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-700">{error}</div>}
@@ -225,15 +311,15 @@ export default function CategoryPromptPage() {
         <section className="mb-5 rounded-[1.4rem] border border-slate-200/80 bg-white/90 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur">
           <div className="mb-4 flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-slate-950">类目参考图</h2>
-              <p className="mt-1 text-sm text-slate-500">只用于“单纯图片生成”。商品生成不会读取这里的图片，只读取商品行里的原始参考图。</p>
+              <h2 className="text-lg font-semibold text-slate-950">{text.referenceTitle}</h2>
+              <p className="mt-1 text-sm text-slate-500">{text.referenceDescription}</p>
             </div>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
               className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-950/15 hover:bg-slate-800 disabled:bg-slate-300"
             >
-              {uploading ? '上传中...' : '上传图片'}
+              {uploading ? text.uploading : text.upload}
             </button>
           </div>
           <input ref={fileInputRef} type="file" multiple accept="image/*" className="hidden" onChange={(event) => uploadImages(Array.from(event.target.files || []))} />
@@ -254,23 +340,23 @@ export default function CategoryPromptPage() {
             onDrop={(event) => {
               event.preventDefault()
               setDragActive(false)
-              uploadImages(Array.from(event.dataTransfer.files || []))
+              void uploadImages(Array.from(event.dataTransfer.files || []))
             }}
             className={`mb-4 cursor-pointer rounded-2xl border-2 border-dashed p-7 text-center transition-colors ${dragActive ? 'border-blue-500 bg-blue-50' : 'border-blue-300 bg-blue-50/40 hover:bg-white'}`}
           >
-            <div className="text-base font-semibold text-slate-900">拖入类目参考图，或点击从本地选择</div>
-            <p className="mt-2 text-xs text-slate-500">这些图片会和本类目的指令交叉生成：图片数量 × 指令数量。</p>
+            <div className="text-base font-semibold text-slate-900">{text.uploadHintTitle}</div>
+            <p className="mt-2 text-xs text-slate-500">{text.uploadHintBody}</p>
           </div>
           {(category?.images || []).length === 0 ? (
-            <div className="rounded-2xl bg-slate-50 p-6 text-center text-sm text-slate-500">暂无类目参考图。</div>
+            <div className="rounded-2xl bg-slate-50 p-6 text-center text-sm text-slate-500">{text.noImages}</div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
               {(category?.images || []).map((image) => (
                 <article key={image.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <img src={imageUrls[image.storage_path]} alt={image.display_name} className="aspect-square w-full rounded-xl object-cover" />
+                  <SignedImage src={imageUrls[image.storage_path]} alt={image.display_name} width={320} height={320} className="aspect-square w-full rounded-xl object-cover" />
                   <div className="mt-2 flex items-center justify-between gap-2">
                     <p className="truncate text-xs font-medium text-slate-600" title={image.display_name}>{image.display_name}</p>
-                    <button onClick={() => deleteImage(image)} className="text-xs font-semibold text-red-600 hover:text-red-800">删除</button>
+                    <button onClick={() => deleteImage(image)} className="text-xs font-semibold text-red-600 hover:text-red-800">{text.delete}</button>
                   </div>
                 </article>
               ))}
@@ -285,24 +371,26 @@ export default function CategoryPromptPage() {
                 <div className="flex items-center gap-2">
                   <span className="rounded bg-slate-950 px-2 py-1 text-xs font-semibold text-white">P{prompt.prompt_number}</span>
                   <span className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">
-                    {DEFAULT_PROMPT_ROLES.find((role) => role.value === prompt.prompt_role)?.label || prompt.prompt_role || '自定义'}
+                    {promptRoleLabel(prompt.prompt_role, language)}
                   </span>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => startEdit(prompt)} className="text-sm font-medium text-blue-600">编辑</button>
-                  <button onClick={() => deletePrompt(prompt)} className="text-sm font-medium text-red-600">删除</button>
+                  <button onClick={() => startEdit(prompt)} className="text-sm font-medium text-blue-600">{text.edit}</button>
+                  <button onClick={() => deletePrompt(prompt)} className="text-sm font-medium text-red-600">{text.delete}</button>
                 </div>
               </div>
               {editingId === prompt.id ? (
                 <div className="space-y-3">
                   <select value={editingRole} onChange={(e) => setEditingRole(e.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
-                    {DEFAULT_PROMPT_ROLES.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
-                    <option value="custom">自定义</option>
+                    {DEFAULT_PROMPT_ROLES.map((role) => (
+                      <option key={role.value} value={role.value}>{promptRoleLabel(role.value, language)}</option>
+                    ))}
+                    <option value="custom">{promptRoleLabel('custom', language)}</option>
                   </select>
                   <textarea value={editingText} onChange={(e) => setEditingText(e.target.value)} rows={8} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm leading-6" />
                   <div className="flex gap-2">
-                    <button onClick={updatePrompt} className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white">保存</button>
-                    <button onClick={() => setEditingId(null)} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">取消</button>
+                    <button onClick={updatePrompt} className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white">{text.save}</button>
+                    <button onClick={() => setEditingId(null)} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">{text.cancel}</button>
                   </div>
                 </div>
               ) : (
@@ -313,49 +401,53 @@ export default function CategoryPromptPage() {
         </section>
 
         <section className="mt-5 rounded-[1.4rem] border border-slate-200/80 bg-white/90 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.05)] backdrop-blur">
-          <h2 className="text-sm font-semibold text-slate-900">新增指令</h2>
+          <h2 className="text-sm font-semibold text-slate-900">{text.addPrompt}</h2>
           <div className="mt-3 space-y-3">
             <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
-              {DEFAULT_PROMPT_ROLES.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
-              <option value="custom">自定义</option>
+              {DEFAULT_PROMPT_ROLES.map((role) => (
+                <option key={role.value} value={role.value}>{promptRoleLabel(role.value, language)}</option>
+              ))}
+              <option value="custom">{promptRoleLabel('custom', language)}</option>
             </select>
-            <textarea value={newText} onChange={(e) => setNewText(e.target.value)} rows={6} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm leading-6" placeholder="输入新图片指令" />
+            <textarea value={newText} onChange={(e) => setNewText(e.target.value)} rows={6} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm leading-6" placeholder={text.addPromptPlaceholder} />
             <button onClick={addPrompt} className="rounded-md bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
-              添加指令
+              {text.addPromptButton}
             </button>
           </div>
         </section>
 
         <section className="mt-5 rounded-[1.4rem] border border-blue-200/80 bg-blue-50/50 p-5 shadow-[0_18px_55px_rgba(15,23,42,0.04)]">
-          <h2 className="text-lg font-semibold text-slate-950">AI 自动生成新指令</h2>
-          <p className="mt-1 text-sm text-slate-600">输入大致需求和图片类型，系统会结合类目特征、已有指令结构、规则模板和图片限制，让 Gemini 生成一条可直接保存的新指令。</p>
+          <h2 className="text-lg font-semibold text-slate-950">{text.aiTitle}</h2>
+          <p className="mt-1 text-sm text-slate-600">{text.aiDescription}</p>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <label className="block">
-              <span className="mb-2 block text-sm font-semibold text-slate-700">图片类型</span>
+              <span className="mb-2 block text-sm font-semibold text-slate-700">{text.imageType}</span>
               <select value={aiImageType} onChange={(event) => setAiImageType(event.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50">
-                {DEFAULT_PROMPT_ROLES.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
-                <option value="custom">自定义图</option>
+                {DEFAULT_PROMPT_ROLES.map((role) => (
+                  <option key={role.value} value={role.value}>{promptRoleLabel(role.value, language)}</option>
+                ))}
+                <option value="custom">{promptRoleLabel('custom', language)}</option>
               </select>
             </label>
             <label className="block">
-              <span className="mb-2 block text-sm font-semibold text-slate-700">风格要求</span>
-              <input value={aiStyle} onChange={(event) => setAiStyle(event.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder="如高级、干净、日常使用场景、详情页排版" />
+              <span className="mb-2 block text-sm font-semibold text-slate-700">{text.style}</span>
+              <input value={aiStyle} onChange={(event) => setAiStyle(event.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder={text.stylePlaceholder} />
             </label>
             <label className="block">
-              <span className="mb-2 block text-sm font-semibold text-slate-700">人物要求</span>
-              <input value={aiPeople} onChange={(event) => setAiPeople(event.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder="如不要人物 / 可出现手模 / 可出现模特使用" />
+              <span className="mb-2 block text-sm font-semibold text-slate-700">{text.people}</span>
+              <input value={aiPeople} onChange={(event) => setAiPeople(event.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder={text.peoplePlaceholder} />
             </label>
             <label className="block">
-              <span className="mb-2 block text-sm font-semibold text-slate-700">展示方式/场景</span>
-              <input value={aiScene} onChange={(event) => setAiScene(event.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder="如浴室台面、水感背景、成分卖点布局" />
+              <span className="mb-2 block text-sm font-semibold text-slate-700">{text.scene}</span>
+              <input value={aiScene} onChange={(event) => setAiScene(event.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder={text.scenePlaceholder} />
             </label>
             <label className="block md:col-span-2">
-              <span className="mb-2 block text-sm font-semibold text-slate-700">大致需求</span>
-              <textarea value={aiNeed} onChange={(event) => setAiNeed(event.target.value)} rows={4} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder="写你想新增的指令方向，例如：生成一张适合马来市场的洗面奶商品详情图，包含短卖点文字但不要夸大功效。" />
+              <span className="mb-2 block text-sm font-semibold text-slate-700">{text.need}</span>
+              <textarea value={aiNeed} onChange={(event) => setAiNeed(event.target.value)} rows={4} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50" placeholder={text.needPlaceholder} />
             </label>
           </div>
           <button onClick={generatePromptWithAi} disabled={generatingPrompt} className="mt-4 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700 disabled:bg-slate-300">
-            {generatingPrompt ? 'AI 生成并保存中...' : 'AI 生成并保存指令'}
+            {generatingPrompt ? text.aiGenerating : text.aiGenerate}
           </button>
         </section>
       </main>

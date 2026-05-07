@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
+import { normalizeProductImageRole } from '@/lib/types'
 
 export async function PUT(
   request: NextRequest,
@@ -31,9 +32,15 @@ export async function PUT(
     return NextResponse.json({ error: 'Prompt not found' }, { status: 404 })
   }
 
+  const normalizedRole = normalizeProductImageRole(prompt_role)
+  const updateData: Record<string, unknown> = {
+    prompt_text,
+    prompt_role: normalizedRole || prompt_role || 'custom',
+  }
+
   const { data, error } = await supabase
     .from('category_prompts')
-    .update({ prompt_text, prompt_role: prompt_role || 'custom' })
+    .update(updateData)
     .eq('id', id)
     .select()
     .single()

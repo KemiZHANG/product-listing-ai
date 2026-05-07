@@ -274,8 +274,8 @@ async function startBatchJob(supabase: RequestSupabase, apiKey: string, job: Job
   }
 
   const jsonl = await buildBatchInputJsonl(supabase, items as JobItemRecord[])
-  const inputFileName = await uploadBatchInputFile(apiKey, jsonl, `nano-banana-${job.id}`)
-  const batchName = await createGeminiBatch(apiKey, inputFileName, `nano-banana-${job.id}`)
+    const inputFileName = await uploadBatchInputFile(apiKey, jsonl, `listing-workspace-${job.id}`)
+    const batchName = await createGeminiBatch(apiKey, inputFileName, `listing-workspace-${job.id}`)
 
   const itemIds = items.map((item) => item.id)
   await supabase
@@ -704,8 +704,8 @@ async function startOpenAIBatchJob(supabase: RequestSupabase, apiKey: string, jo
   }
 
   const jsonl = await buildOpenAIBatchInputJsonl(supabase, apiKey, items as JobItemRecord[])
-  const inputFileId = await uploadOpenAIBatchInputFile(apiKey, jsonl, `nano-banana-openai-${job.id}.jsonl`)
-  const batchId = await createOpenAIBatch(apiKey, inputFileId, `nano-banana-openai-${job.id}`)
+      const inputFileId = await uploadOpenAIBatchInputFile(apiKey, jsonl, `listing-workspace-openai-${job.id}.jsonl`)
+      const batchId = await createOpenAIBatch(apiKey, inputFileId, `listing-workspace-openai-${job.id}`)
 
   const itemIds = items.map((item) => item.id)
   await supabase

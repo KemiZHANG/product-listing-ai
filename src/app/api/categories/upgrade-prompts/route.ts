@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { defaultDetailPrompt, defaultMainPrompt, defaultScenePrompt } from '@/lib/product-generation'
+import { getCategoryPromptSubject } from '@/lib/category-prompts'
 import { normalizeProductImageRole } from '@/lib/types'
 import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
 
   const { data: categories, error } = await supabase
     .from('categories')
-    .select('id, name_zh')
+    .select('id, name_zh, slug')
     .eq('workspace_key', workspaceKey)
 
   if (error) {
@@ -40,21 +41,22 @@ export async function POST(request: NextRequest) {
       .order('prompt_number', { ascending: true })
 
     const existing = existingPrompts || []
+    const categorySubject = getCategoryPromptSubject({ slug: category.slug, name_zh: category.name_zh })
     const promptRows = [
       {
         number: 1,
         role: 'main',
-        text: pickPromptText(existing, 'main', defaultMainPrompt(category.name_zh, 1)),
+        text: pickPromptText(existing, 'main', defaultMainPrompt(categorySubject, 1)),
       },
       {
         number: 2,
         role: 'scene',
-        text: pickPromptText(existing, 'scene', defaultScenePrompt(category.name_zh, 1)),
+        text: pickPromptText(existing, 'scene', defaultScenePrompt(categorySubject, 1)),
       },
       {
         number: 3,
         role: 'detail',
-        text: pickPromptText(existing, 'detail', defaultDetailPrompt(category.name_zh, 1)),
+        text: pickPromptText(existing, 'detail', defaultDetailPrompt(categorySubject, 1)),
       },
     ]
 

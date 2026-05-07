@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
+import { compactCategoryPrompts } from '@/lib/category-prompts'
 
 export async function GET(
   request: NextRequest,
@@ -40,7 +41,7 @@ export async function GET(
 
   return NextResponse.json({
     ...category,
-    prompts: prompts || [],
+    prompts: compactCategoryPrompts(prompts || [], category.name_zh),
     images: images || [],
   })
 }

@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "sync:resume-reference-data": "node scripts/sync-resume-reference-data.mjs",
+    "cleanup:legacy-six-image-data": "node scripts/cleanup-legacy-six-image-data.mjs"
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.15.0",

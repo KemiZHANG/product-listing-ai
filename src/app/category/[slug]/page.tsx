@@ -5,8 +5,10 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { apiFetch } from '@/lib/api'
+import { signStorageUrls } from '@/lib/signed-storage'
 import Navbar from '@/components/Navbar'
 import ConfirmDialog from '@/components/ConfirmDialog'
+import SignedImage from '@/components/SignedImage'
 import type { Category, CategoryPrompt, CategoryImage } from '@/lib/types'
 
 interface CategoryDetail extends Category {
@@ -77,7 +79,7 @@ export default function CategoryDetailPage() {
   // Fetch category data
   const fetchCategory = useCallback(async () => {
     if (!userId) return
-    const cacheKey = `nano-banana:category:${slug}`
+  const cacheKey = `listing-studio:category:${slug}`
     const cached = window.sessionStorage.getItem(cacheKey)
     let hasCachedCategory = false
     if (cached) {
@@ -104,15 +106,7 @@ export default function CategoryDetailPage() {
       const detail: CategoryDetail = await detailRes.json()
       setCategory(detail)
       window.sessionStorage.setItem(cacheKey, JSON.stringify(detail))
-      const signedUrls = await Promise.all(
-        detail.images.map(async (image) => {
-          const { data } = await supabase.storage
-            .from('images')
-            .createSignedUrl(image.storage_path, 60 * 60)
-          return [image.storage_path, data?.signedUrl ?? ''] as const
-        })
-      )
-      setImageUrls(Object.fromEntries(signedUrls))
+      setImageUrls(await signStorageUrls('images', detail.images.map((image) => image.storage_path)))
     } catch (err) {
       console.error(err)
     } finally {
@@ -137,7 +131,7 @@ export default function CategoryDetailPage() {
       if (!res.ok) throw new Error('Failed to add prompt')
       setNewPromptText('')
       setAddingPrompt(false)
-      window.sessionStorage.removeItem(`nano-banana:category:${slug}`)
+        window.sessionStorage.removeItem(`listing-studio:category:${slug}`)
       await fetchCategory()
     } catch (err) {
       console.error(err)
@@ -191,7 +185,7 @@ export default function CategoryDetailPage() {
       if (!res.ok) throw new Error('Failed to update prompt')
       setEditingPromptId(null)
       setEditingPromptText('')
-      window.sessionStorage.removeItem(`nano-banana:category:${slug}`)
+        window.sessionStorage.removeItem(`listing-studio:category:${slug}`)
       await fetchCategory()
     } catch (err) {
       console.error(err)
@@ -207,7 +201,7 @@ export default function CategoryDetailPage() {
         try {
           const res = await apiFetch(`/api/prompts/${prompt.id}`, { method: 'DELETE' })
           if (!res.ok) throw new Error('Failed to delete prompt')
-          window.sessionStorage.removeItem(`nano-banana:category:${slug}`)
+        window.sessionStorage.removeItem(`listing-studio:category:${slug}`)
           await fetchCategory()
         } catch (err) {
           console.error(err)
@@ -252,7 +246,7 @@ export default function CategoryDetailPage() {
           console.error('Upload failed for', file.name, err.error)
         }
       }
-      window.sessionStorage.removeItem(`nano-banana:category:${slug}`)
+        window.sessionStorage.removeItem(`listing-studio:category:${slug}`)
       await fetchCategory()
     } catch (err) {
       console.error(err)
@@ -287,7 +281,7 @@ export default function CategoryDetailPage() {
       if (!res.ok) throw new Error('Failed to update image')
       setEditingImageId(null)
       setEditingImageName('')
-      window.sessionStorage.removeItem(`nano-banana:category:${slug}`)
+        window.sessionStorage.removeItem(`listing-studio:category:${slug}`)
       await fetchCategory()
     } catch (err) {
       console.error(err)
@@ -303,7 +297,7 @@ export default function CategoryDetailPage() {
         try {
           const res = await apiFetch(`/api/images/${image.id}`, { method: 'DELETE' })
           if (!res.ok) throw new Error('Failed to delete image')
-          window.sessionStorage.removeItem(`nano-banana:category:${slug}`)
+        window.sessionStorage.removeItem(`listing-studio:category:${slug}`)
           await fetchCategory()
         } catch (err) {
           console.error(err)
@@ -653,11 +647,12 @@ export default function CategoryDetailPage() {
                 >
                   {/* Thumbnail */}
                   <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md bg-gray-100">
-                    <img
+                    <SignedImage
                       src={getImageUrl(image.storage_path)}
                       alt={image.display_name}
+                      width={56}
+                      height={56}
                       className="h-full w-full object-cover"
-                      loading="lazy"
                     />
                   </div>
 

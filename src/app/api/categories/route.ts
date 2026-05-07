@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getWorkspaceContext, getWorkspaceSupabase } from '@/lib/workspace'
 import { defaultDetailPrompt, defaultMainPrompt, defaultScenePrompt } from '@/lib/product-generation'
 import { ensurePresetCategoriesForUser } from '@/lib/preset-seed'
+import { countCompactPromptRoles, getCategoryPromptSubject } from '@/lib/category-prompts'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -44,24 +45,25 @@ function dedupeVisibleCategories(categories: EnrichedCategory[]) {
 }
 
 function defaultPromptRows(categoryId: string, categoryName: string) {
+  const categorySubject = getCategoryPromptSubject({ slug: categoryName, name_zh: categoryName })
   return [
     {
       category_id: categoryId,
       prompt_number: 1,
       prompt_role: 'main',
-      prompt_text: defaultMainPrompt(categoryName, 1),
+      prompt_text: defaultMainPrompt(categorySubject, 1),
     },
     {
       category_id: categoryId,
       prompt_number: 2,
       prompt_role: 'scene',
-      prompt_text: defaultScenePrompt(categoryName, 1),
+      prompt_text: defaultScenePrompt(categorySubject, 1),
     },
     {
       category_id: categoryId,
       prompt_number: 3,
       prompt_role: 'detail',
-      prompt_text: defaultDetailPrompt(categoryName, 1),
+      prompt_text: defaultDetailPrompt(categorySubject, 1),
     },
   ]
 }
@@ -97,14 +99,16 @@ export async function GET(request: NextRequest) {
   const categoryIds = (categories || []).map((cat) => cat.id)
   const [promptRes, imageRes] = categoryIds.length > 0
     ? await Promise.all([
-        supabase.from('category_prompts').select('category_id').in('category_id', categoryIds),
+        supabase.from('category_prompts').select('category_id,prompt_number,prompt_role').in('category_id', categoryIds),
         supabase.from('category_images').select('category_id').in('category_id', categoryIds),
       ])
     : [{ data: [] }, { data: [] }]
 
-  const promptCounts = new Map<string, number>()
+  const promptsByCategory = new Map<string, Array<{ category_id: string; prompt_number: number; prompt_role?: string | null }>>()
   for (const prompt of promptRes.data || []) {
-    promptCounts.set(prompt.category_id, (promptCounts.get(prompt.category_id) || 0) + 1)
+    const rows = promptsByCategory.get(prompt.category_id) || []
+    rows.push(prompt)
+    promptsByCategory.set(prompt.category_id, rows)
   }
 
   const imageCounts = new Map<string, number>()
@@ -114,7 +118,7 @@ export async function GET(request: NextRequest) {
 
   const enriched = (categories || []).map((cat) => ({
     ...cat,
-    prompt_count: promptCounts.get(cat.id) || 0,
+    prompt_count: countCompactPromptRoles(promptsByCategory.get(cat.id)),
     image_count: imageCounts.get(cat.id) || 0,
   }))
 
@@ -177,7 +181,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  const { error: promptError } = await supabase.from('category_prompts').insert(defaultPromptRows(data.id, name_zh))
+  const { error: promptError } = await supabase
+    .from('category_prompts')
+    .insert(defaultPromptRows(data.id, normalizedSlug))
   if (promptError) {
     return NextResponse.json({ error: promptError.message }, { status: 500 })
   }

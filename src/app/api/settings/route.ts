@@ -22,6 +22,7 @@ async function withGenerationMode<T extends {
   const lockedToStaffBatch = emailAuthorized && !admin
   const generationMode = lockedToStaffBatch ? 'batch' : (stored.generationMode === 'direct' ? 'direct' : 'batch')
   const imageProvider = lockedToStaffBatch ? 'gemini' : (stored.imageProvider === 'openai' ? 'openai' : 'gemini')
+
   return {
     ...settings,
     gemini_api_key_encrypted: hasStoredKey ? 'configured' : null,
@@ -53,7 +54,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // Create default settings if none exist
   if (!settings) {
     const { data: newSettings, error: createError } = await supabase
       .from('system_settings')
@@ -84,7 +84,14 @@ export async function PUT(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { gemini_api_key, openai_api_key, use_builtin_key, builtin_key_password_verified, generation_mode, image_provider } = body
+  const {
+    gemini_api_key,
+    openai_api_key,
+    use_builtin_key,
+    builtin_key_password_verified,
+    generation_mode,
+    image_provider,
+  } = body
 
   const updateData: Record<string, unknown> = {}
 
@@ -102,13 +109,13 @@ export async function PUT(request: NextRequest) {
 
   if (lockedToStaffBatch && generation_mode === 'direct') {
     return NextResponse.json({
-      error: '公司授权邮箱仅开放 Nano Banana Batch 模式。',
+      error: 'Company-authorized staff accounts stay on Gemini batch mode only.',
     }, { status: 403 })
   }
 
   if (lockedToStaffBatch && image_provider === 'openai') {
     return NextResponse.json({
-      error: '公司授权邮箱仅开放 Nano Banana Batch 模式。',
+      error: 'Company-authorized staff accounts stay on Gemini batch mode only.',
     }, { status: 403 })
   }
 
@@ -116,7 +123,7 @@ export async function PUT(request: NextRequest) {
     const trimmedKey = String(gemini_api_key).trim()
     if (!isValidGeminiApiKey(trimmedKey)) {
       return NextResponse.json({
-        error: '请输入有效的 Gemini API Key。Google AI Studio 的 key 通常以 AIza 开头。',
+        error: 'Enter a valid Gemini API key. Google AI Studio keys usually start with AIza.',
       }, { status: 400 })
     }
   }
@@ -125,7 +132,7 @@ export async function PUT(request: NextRequest) {
     const trimmedKey = String(openai_api_key).trim()
     if (!isValidOpenAIApiKey(trimmedKey)) {
       return NextResponse.json({
-        error: '请输入有效的 OpenAI API Key，通常以 sk- 开头。',
+        error: 'Enter a valid OpenAI API key. These usually start with sk-.',
       }, { status: 400 })
     }
   }
@@ -151,36 +158,33 @@ export async function PUT(request: NextRequest) {
           : currentStored.imageProvider,
     })
   }
+
   if (use_builtin_key !== undefined) {
     updateData.use_builtin_key = use_builtin_key
-    // If switching away from builtin, reset verification
     if (!use_builtin_key) {
       updateData.builtin_key_password_verified = false
     }
   }
+
   if (builtin_key_password_verified !== undefined) {
     updateData.builtin_key_password_verified = builtin_key_password_verified
   }
 
-  // Upsert settings
-  let result
-  if (existingSettings) {
-    result = await supabase
-      .from('system_settings')
-      .update(updateData)
-      .eq('user_id', user.id)
-      .select()
-      .single()
-  } else {
-    result = await supabase
-      .from('system_settings')
-      .insert({
-        user_id: user.id,
-        ...updateData,
-      })
-      .select()
-      .single()
-  }
+  const result = existingSettings
+    ? await supabase
+        .from('system_settings')
+        .update(updateData)
+        .eq('user_id', user.id)
+        .select()
+        .single()
+    : await supabase
+        .from('system_settings')
+        .insert({
+          user_id: user.id,
+          ...updateData,
+        })
+        .select()
+        .single()
 
   if (result.error) {
     return NextResponse.json({ error: result.error.message }, { status: 500 })
